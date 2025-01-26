@@ -1,0 +1,56 @@
+/* Spotify UI Style */
+body {
+    background-color: #191414; /* Dark background */
+    color: #FFFFFF; /* White text */
+    font-family: 'Helvetica Neue', Arial, sans-serif; /* Font similar to Spotify */
+    margin: 0;
+    padding: 20px;
+}
+
+h1, h2, h3 {
+    color: #1DB954; /* Spotify green for headings */
+}
+
+a {
+    color: #1DB954; /* Spotify green for links */
+    text-decoration: none; /* Remove underline */
+}
+
+a:hover {
+    text-decoration: underline; /* Underline on hover */
+}
+
+.button {
+    background-color: #1DB954; /* Spotify green button */
+    color: #FFFFFF; /* White text on button */
+    border: none;
+    border-radius: 5px;
+    padding: 10px 20px;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+.button:hover {
+    background-color: #1aa34a; /* Darker green on hover */
+}
+
+/* Card style for playlists or items */
+.card {
+    background-color: #212121; /* Slightly lighter dark for cards */
+    border-radius: 10px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+/* Input fields */
+input[type="text"], input[type="password"], textarea {
+    background-color: #535353; /* Input field background */
+    color: #FFFFFF; /* Text color in input fields */
+    border: none;
+    border-radius: 5px;
+    padding: 10px;
+}
+
+input[type="text"]:focus, input[type="password"]:focus, textarea:focus {
+    outline: none; /* Remove outline on focus */
+}
