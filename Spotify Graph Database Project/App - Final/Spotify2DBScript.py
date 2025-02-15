@@ -11,6 +11,7 @@ import neo4j
 from neo4j import GraphDatabase, exceptions
 import streamlit as st
 import logging
+import os
 
 ################################### Code To Pull Auth Code/Token ##################################
 # This Portion of the Code Does The Following:
@@ -35,10 +36,6 @@ CLIENT_ID = '951eba0a5d2e4d3b800d74f24b0cd84c'                                  
 REDIRECT_URI = 'http://localhost:8501'                                         # Redirect URI 
 SCOPE = 'playlist-read-private playlist-read-collaborative user-read-recently-played'   # Scopes requested from the API
 PORT = 8000
-
-#Database Connection Details
-DB_URI = "bolt://localhost:7687"  # Replace with your Neo4j IP
-AUTH = ("neo4j","deadmau5skrillex")
 
 # endpoints
 GET_RECENTLY_PLAYED_URL = 'https://api.spotify.com/v1/me/player/recently-played'
@@ -89,7 +86,7 @@ class apiHelper():
         # Build the authorization URL with PKCE and state variable
         params = {
             'response_type': 'code',
-            'client_id': CLIENT_ID,
+            'client_id': st.secrets["spotify_api"]["client_id"],
             'state': state,
             'scope': SCOPE,
             'code_challenge_method': 'S256',
@@ -107,7 +104,7 @@ class apiHelper():
             token_data = {
                 'grant_type': 'refresh_token',
                 'refresh_token': refresh_token,
-                'client_id': CLIENT_ID
+                'client_id': st.secrets["spotify_api"]["client_id"]
             }
         #use the refresh token to fetch a new access token if provided
         elif auth_code is not None:
@@ -115,7 +112,7 @@ class apiHelper():
                 'grant_type': 'authorization_code',
                 'code': auth_code,
                 'redirect_uri': REDIRECT_URI,
-                'client_id': CLIENT_ID,
+                'client_id': st.secrets["spotify_api"]["client_id"],
                 'code_verifier': code_verifier  # Important: Use the original code verifier
             }
         else:
@@ -210,11 +207,12 @@ class apiHelper():
 class Neo4jHelper:
     def __init__(self, params = None):
         self.params = params
-    
+
     # General query to make db calls to neo4j. Pass along query and query params. Error Handling incorporated into this as well.
     def runQuery(self, query, params = None):
         try:
-            with GraphDatabase.driver(DB_URI, auth=AUTH) as driver:
+            db_uri = f"bolt://{st.secrets["user_database"]["host"]}:{st.secrets["user_database"]["port"]}"
+            with GraphDatabase.driver(db_uri, auth=(st.secrets["user_database"]["username"],st.secrets["user_database"]["password"])) as driver:
                 driver.verify_connectivity()
                 result = driver.execute_query(query, params, result_transformer_= neo4j.Result.to_df)
 
@@ -267,6 +265,27 @@ class Neo4jHelper:
                 results[output_values[i]].append(result.iloc[j][output_values[i]])
 
         return results
+
+    # pulls Boolean indicator that indicates whether a refresh token is expired or not
+    def getRefreshTokenExpired(self):
+        query = f"""
+            MATCH (n:Config)
+            RETURN n.refresh_token_expired AS refreshTokenExpired
+        """
+        
+        result = self.getResultFromDB(query,params = {},output_values=["refreshTokenExpired"])
+        return result["refreshTokenExpired"][0]
+
+    # pulls Boolean indicator that indicates whether a refresh token is expired or not
+    def storeRefreshTokenExpired(self,value):
+        query = f"""
+            MATCH (n:Config)
+            SET n.refresh_token_expired = $value
+            RETURN n AS output
+        """
+
+        result = self.getResultFromDB(query,params = {"value":value},output_values=["output"])
+        return result["output"][0]
 
     # Checks if a node in DB Exists
     def check_node_exists(self,id="",type=""):
@@ -665,7 +684,6 @@ def convertJSON(api_json, type):
 
     match type:
         case "track":
-
             #iterate through each track listing, and transform to refined track object
             for track in api_json:
                 # initialize artists array to store artists dictionaries
@@ -674,31 +692,31 @@ def convertJSON(api_json, type):
                 # Populate artists array to contain id and url of each returned artist
                 for artist in track["track"]["artists"]:
                     artists.append({
-                        "id": artist["id"],
-                        "url": artist["href"]
+                        "id": artist.get("id", ""),
+                        "url": artist.get("href", "")
                     })
 
-                if track["context"] is None:
+                if track.get("context") is None:
                     context_type = ""
                     context_url = ""
                     id = ""
                 else:
-                    context_type = track["context"]["type"]
-                    context_url = track["context"]["href"]
+                    context_type = track["context"].get("type","")
+                    context_url = track["context"].get("href","")
 
                     # id is not returned in API response. Below extracts ID from URL
                     id = context_url.split("/")[-1]
             
-                results[track["track"]["id"]] = createTrackDict(
-                    name = track["track"]["name"],
-                    popularity = track["track"]["popularity"],
-                    played_at = track["played_at"],
+                results[track["track"].get("id", "")] = createTrackDict(
+                    name = track["track"].get("name",""),
+                    popularity=track["track"].get("popularity", 0),
+                    played_at=track.get("played_at", ""),
                     context_type = context_type,
                     context_url = context_url,
                     context_id = id,
-                    preview_url = track["track"]["preview_url"],
-                    album_url = track["track"]["album"]["href"],
-                    album_id= track["track"]["album"]["id"],
+                    preview_url=track["track"].get("preview_url", ""),
+                    album_url=track["track"]["album"].get("href", ""),
+                    album_id=track["track"]["album"].get("id", ""),
                     artists = artists
                 )
         
@@ -707,23 +725,23 @@ def convertJSON(api_json, type):
             tracks = []
 
             # Populate artists array to contain id and url of each returned artist
-            for artist in api_json["artists"]:
+            for artist in api_json.get("artists", []):
                 artists.append({
-                    "id": artist["id"],
-                    "url": artist["href"]
+                    "id": artist.get("id", ""),
+                    "url": artist.get("href", "")
                 })
             
             # Pull IDs of all tracks in album and store in list for later analysis
-            for track in api_json["tracks"]["items"]:
-                tracks.append(track["id"])
+            for track in api_json.get("tracks", {}).get("items", []):
+                tracks.append(track.get("id", ""))
         
             # use function to create new object
             results = createAlbumDict(
-                name = api_json["name"],
-                popularity = api_json["popularity"],
-                image_url = api_json["images"][0]["url"],
-                genres = api_json["genres"],
-                label = api_json["label"],
+                name=api_json.get("name", "Unknown"),
+                popularity=api_json.get("popularity", 0),
+                image_url = api_json.get("images", [{}])[0].get("url", ""),
+                genres=api_json.get("genres", []),
+                label=api_json.get("label", "Unknown"),
                 artists = artists,
                 tracks = tracks
             )
@@ -732,36 +750,37 @@ def convertJSON(api_json, type):
 
             # use function to create new object
             results[api_json["id"]] = createArtistDict(
-                name = api_json["name"],
-                popularity = api_json["popularity"],
-                genres = api_json["genres"],
-                image_url = api_json["images"][0]["url"],
-                num_followers = api_json["followers"]["total"]
+                name=api_json.get("name", "Unknown"),
+                popularity=api_json.get("popularity", 0),
+                genres=api_json.get("genres", []),
+                image_url = api_json.get("images", [{}])[0].get("url", ""),
+                num_followers=api_json.get("followers", {}).get("total", 0)
             )
         
         case "playlist":
             tracks = []
 
             # pull all tracks and store their IDs in an array
-            for track in api_json["tracks"]["items"]:
-                tracks.append(track["track"]["id"])
+            for track in api_json.get("tracks", {}).get("items", []):
+                if track.get("track"):
+                    tracks.append(track["track"].get("id", ""))
 
             # use function to create new object
             results = createPlaylistDict(
-                name = api_json["name"], 
-                description = api_json["description"],
-                num_followers = api_json["followers"]["total"],
-                image_url = api_json["images"][0]["url"],
-                owner_name = api_json["owner"]["display_name"], 
-                owner_id = api_json["owner"]["id"], 
-                owner_url = api_json["owner"]["href"],
+                name=api_json.get("name", ""),
+                description=api_json.get("description", ""),
+                num_followers=api_json.get("followers", {}).get("total", 0),
+                image_url = api_json.get("images", "")[0].get("url", ""),
+                owner_name=api_json.get("owner", {}).get("display_name", ""),
+                owner_id=api_json.get("owner", {}).get("id", ""),
+                owner_url=api_json.get("owner", {}).get("href", ""),
                 tracks = tracks
             )
         
     return results
 
 # the main function that pulls API data into DB. Made separate from main function so that it can be run in main app file.
-def API2DB(access_token = "", refresh_token="", utc_timestamp=""):
+def API2DB(access_token = "", refresh_token="", utc_timestamp="",my_bar = None):
      # Configure the logger
     logging.basicConfig(
         filename='Logs/Spotify2DBPythonScriptLogs.log',          # Log file name
@@ -777,11 +796,6 @@ def API2DB(access_token = "", refresh_token="", utc_timestamp=""):
     # check if config node (used to store metadata/tokens) exists in DB. If not, create it
     if(access_token == ""):
         access_token,refresh_token = apiManager.getRefreshToken(Neo4jManager=neo4jManager,refresh_token=neo4jManager.getRefreshTokenFromDB())
-
-        if(access_token is None):
-            print("Error: access token could not be pulled. Please check refresh token is correctly being pulled")
-            logging.error("access token could not be pulled. Please check refresh token is correctly being pulled")
-            return
           
     # get current UTC timestamp if timestamp isn't given
     if(utc_timestamp == ""):
@@ -795,6 +809,14 @@ def API2DB(access_token = "", refresh_token="", utc_timestamp=""):
     headers = {
         'Authorization': f'Bearer {access_token}',
     }
+
+    #if access token isn't able to get pulled, throw an error and store metric in DB to tell front end that refresh token is expired
+    if access_token is False:
+        st.error('Error: access token was unable to be pulled.. this likely means the refresh token is expired. Rerun so user can reauthorize', icon=":material/sentiment_dissatisfied:")
+        neo4jManager.storeRefreshTokenExpired(True)
+        return "refreshTokenExpired"
+    else:
+        neo4jManager.storeRefreshTokenExpired(False)
 
     # set the header value
     apiManager.headers = headers
@@ -816,8 +838,14 @@ def API2DB(access_token = "", refresh_token="", utc_timestamp=""):
     # get the timestamp associated with the last play time for the song most recently played in DB
     last_sync_timestamp = neo4jManager.getTimestamp()
 
-    # store last synced imestamp in DB
+    # store timestamp of last synced song in DB
     neo4jManager.storeTimestamp(int(utc_timestamp))
+
+    # used to adjust progress bar
+    progress_delta = int(100 / len(recently_played_tracks))
+
+    # passed along to progress bar to denote how much progress has passed
+    progress_value = 0
 
     # ETL code. Extracts API info, converts it into objects that are then loaded to Graph Database
     for track in list(recently_played_tracks.keys()):
@@ -1045,7 +1073,8 @@ def API2DB(access_token = "", refresh_token="", utc_timestamp=""):
 
                     if not neo4jManager.doesPathExist(track,playlist_id,"Track","Playlist","IN_PLAYLIST"):
                         neo4jManager.makePath("IN_PLAYLIST",track,playlist_id,"Track","Playlist")
-
+        progress_value = progress_value + progress_delta
+        my_bar.progress(progress_value, text = "Loading Tracks... Please Wait")
     # remove refresh and acccess token from memory
     refresh_token = ""
     access_token = ""
