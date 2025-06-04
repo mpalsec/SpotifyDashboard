@@ -1,17 +1,15 @@
 import requests
 import pkce
-from urllib.parse import urlencode, urlparse, parse_qs
-import secrets
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import webbrowser
+from urllib.parse import urlencode
+from http.server import HTTPServer
 import json
 from datetime import datetime, timezone
-import pandas
 import neo4j
 from neo4j import GraphDatabase, exceptions
 import streamlit as st
 import logging
-import os
+from pymongo import MongoClient
+from neo4j.exceptions import Neo4jError
 
 ################################### Code To Pull Auth Code/Token ##################################
 # This Portion of the Code Does The Following:
@@ -34,41 +32,13 @@ AUTHORIZATION_URL = 'https://accounts.spotify.com/authorize'                    
 TOKEN_URL = 'https://accounts.spotify.com/api/token'                                    # Token endpoint URL
 CLIENT_ID = '951eba0a5d2e4d3b800d74f24b0cd84c'                                          # Your OAuth2 client ID
 REDIRECT_URI = 'http://localhost:8501'                                         # Redirect URI 
-SCOPE = 'playlist-read-private playlist-read-collaborative user-read-recently-played'   # Scopes requested from the API
+SCOPE = 'playlist-read-private playlist-read-collaborative user-read-recently-played user-read-private user-read-email'   # Scopes requested from the API
 PORT = 8000
 
 # endpoints
 GET_RECENTLY_PLAYED_URL = 'https://api.spotify.com/v1/me/player/recently-played'
 
-# calculate state variable used in API auth
-state = secrets.token_urlsafe(16)
-
-
 ####################################    Classes    ######################################
-# Set up a simple HTTP server to listen for the OAuth redirect
-class OAuthCallbackHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        parsed_url = urlparse(self.path)
-        if parsed_url.path == '/redirect':
-            query_components = parse_qs(parsed_url.query)
-            authorization_code = query_components.get('code', [None])[0]
-            returned_state = query_components.get('state', [None])[0]
-            
-            # Check for a valid state to prevent CSRF attacks
-            if returned_state != state:
-                self.send_response(400)
-                self.end_headers()
-                self.wfile.write(b"State mismatch. Possible CSRF attack.")
-                return "invalid","invalid"
-
-            # Display success message
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(b"Authorization complete. You can close this window.")
-
-            # Return the authorization code to the main script
-            self.server.auth_code = authorization_code
-            self.server.state = returned_state
 
 #used for making API Commands
 class apiHelper():
@@ -77,7 +47,7 @@ class apiHelper():
         self.headers = headers
         self.params = params
 
-    def getAuthCodeURL():
+    def getAuthCodeURL(state):
         code_verifier = pkce.generate_code_verifier(length=128)
         code_challenge = pkce.get_code_challenge(code_verifier)
 
@@ -96,7 +66,7 @@ class apiHelper():
 
         # Create the full Auth URL (With Required Parameters)
         auth_url = f"{AUTHORIZATION_URL}?{urlencode(params)}"
-        return auth_url,code_verifier,state
+        return auth_url,code_verifier
 
     def getRefreshToken(self, Neo4jManager, auth_code = None,code_verifier = None,refresh_token = None):
         #Exchange the authorization code for an access token if an auth code is provided
@@ -125,13 +95,17 @@ class apiHelper():
             tokens = response.json()
             access_token = tokens['access_token']
             refresh_token = tokens.get('refresh_token')
-            Neo4jManager.storeRefreshToken(refresh_token)
-            print(f"Storing Refresh Token\n")
+
+            if Neo4jManager.storeRefreshToken(refresh_token):
+                print("refresh token successfully stored")
+            else:
+                print("Error: refresh token could not be stored")
+
             return access_token,refresh_token
         
         else:
             print(f"Failed to get tokens: {response.status_code} {response.text}")
-            return False,False
+            return None,None
 
     ''' function that handles reading API Calls. The type variable determines which API Call we are making. 
         
@@ -140,6 +114,7 @@ class apiHelper():
             2. "album" - Gets info about a specific album
             3. "playlist" - Gets info about a specific user's playlist
             4. "recently_played" - Gets all tracks played before a specific timestamp
+            5. "user" - gets information about the currently logged in user
 
         In cases 1-3, you will need to add either the spotify ID of that artist/playlist/album or must include a 
         full url (for pagination purposes). For the recently played option, an after variable must be included. This is 
@@ -178,6 +153,13 @@ class apiHelper():
                 self.params = {
                     "limit": "50"
                 }
+            
+            case "user":
+                if url is not None:
+                    self.endpoint = url
+                else:
+                    self.endpoint = "https://api.spotify.com/v1/me"
+                self.params = None
                 
         # make API call, get response, and store in object if there are no errors
         api_response = requests.get(self.endpoint, params=self.params, headers=self.headers)
@@ -205,21 +187,30 @@ class apiHelper():
         
 #a helper class used to create and read nodes in Neo4j. It is used to create and match nodes, along with creating paths between nodes
 class Neo4jHelper:
-    def __init__(self, params = None):
+    def __init__(self, user_uid, params = None):
         self.params = params
+        self.user_uid = user_uid
 
     # General query to make db calls to neo4j. Pass along query and query params. Error Handling incorporated into this as well.
     def runQuery(self, query, params = None):
         try:
-            db_uri = f"bolt://{st.secrets["user_database"]["host"]}:{st.secrets["user_database"]["port"]}"
-            with GraphDatabase.driver(db_uri, auth=(st.secrets["user_database"]["username"],st.secrets["user_database"]["password"])) as driver:
+            db_uri = f"bolt://localhost:{st.secrets['neo4j_database']['port']}"
+            with GraphDatabase.driver(db_uri, auth=(st.secrets['neo4j_database']['username'],st.secrets['neo4j_database']['password'])) as driver:
                 driver.verify_connectivity()
-                result = driver.execute_query(query, params, result_transformer_= neo4j.Result.to_df)
 
-                logging.info(f"created a path. Results returned were: {result}\n\nQuery ran was: {query}")
+                try:
+                    result = driver.execute_query(query, params, result_transformer_= neo4j.Result.to_df)
 
-                # Close the driver session
-                driver.session().close()
+                    logging.info(f"Neo4j Query Successful. Results returned were: {result}\n\nQuery ran was: {query}")
+                    return result
+
+                except Neo4jError as e:
+                    print(f"Neo4j error occurred: {e.code} - {e.message}")
+                    return None
+
+                finally:
+                    # Close the driver session
+                    driver.session().close()
 
                 return result
 
@@ -251,78 +242,132 @@ class Neo4jHelper:
 
             pass
 
+    # deletes all nodes associated with a specific user uid
+    def deleteUserNodes(self, user_uid):
+        # f all nodes in DB associated with user
+        query = f"""
+            MATCH(n) WHERE n.user_uid = '{user_uid}' DETACH DELETE n RETURN count(n) AS deleted_count
+        """
+
+        neo4j_result = Neo4jHelper.runQuery(self,query,{'user_uid':user_uid})
+
+        if neo4j_result is not None:
+            print("Query succeeded:", neo4j_result)
+
+            if neo4j_result["deleted_count"][0] > 0:
+                print("User successfully deleted")
+                return neo4j_result["deleted_count"][0]
+            else:
+                print("Error: user was not successfully deleted")
+                return False
+        else:
+            print("neo4j query failed")
+            return False
+
+
     # helper function to get results from DB. output_values is used to tell function what variables to pull. Output is a dictionary of lists containing
     # DB values. The keys in dictionary correspond to the output_value inputs
     def getResultFromDB(Neo4jManager,query,params,output_values=[]):
         results = {}
         result = Neo4jManager.runQuery(query=query, params=params)
 
-        for i in range(len(output_values)):
-            results[output_values[i]] = []
+        if result is not None:
+            print("Query succeeded:", result)
+            for i in range(len(output_values)):
+                results[output_values[i]] = []
 
-        for i in range(len(output_values)):
-            for j in range(len(result)):
-                results[output_values[i]].append(result.iloc[j][output_values[i]])
+            for i in range(len(output_values)):
+                for j in range(len(result)):
+                    results[output_values[i]].append(result.iloc[j][output_values[i]])
 
-        return results
+            return results
+
+        else:
+            print("Query failed but program is continuing.")       
+            return False
+
 
     # pulls Boolean indicator that indicates whether a refresh token is expired or not
     def getRefreshTokenExpired(self):
         query = f"""
             MATCH (n:Config)
+            WHERE n.user_uid = "{self.user_uid}"
             RETURN n.refresh_token_expired AS refreshTokenExpired
         """
         
         result = self.getResultFromDB(query,params = {},output_values=["refreshTokenExpired"])
-        return result["refreshTokenExpired"][0]
+
+        if result is not None:
+            print("Query succeeded:", result)
+            return result["refreshTokenExpired"][0]
+
+        else:
+            print("neo4j query failed")
+            return False
 
     # pulls Boolean indicator that indicates whether a refresh token is expired or not
     def storeRefreshTokenExpired(self,value):
+        print(f"user_uid in storeRefresh: {self.user_uid}")
+        
         query = f"""
             MATCH (n:Config)
+            WHERE n.user_uid = "{self.user_uid}"
             SET n.refresh_token_expired = $value
             RETURN n AS output
         """
 
         result = self.getResultFromDB(query,params = {"value":value},output_values=["output"])
-        return result["output"][0]
+        
+        if result is not None:
+            print("Query succeeded:", result)
+            return True
+
+        else:
+            print("neo4j query failed")
+            return False
 
     # Checks if a node in DB Exists
     def check_node_exists(self,id="",type=""):
         match type:
             case "track":
-                query = """
-                MATCH (n:Track {id: $id}) 
+                query = f"""
+                MATCH (n:Track {{id: "{id}"}}) 
+                WHERE n.user_uid = "{self.user_uid}"
                 RETURN COUNT(n) > 0 AS exists
                 """
 
             case "album":
-                query = """
-                MATCH (n:Album {id: $id}) 
+                query = f"""
+                MATCH (n:Album {{id: "{id}"}}) 
+                WHERE n.user_uid = "{self.user_uid}"
                 RETURN COUNT(n) > 0 AS exists
-                """
+            """
             
             case "artist":
-                query = """
-                MATCH (n:Artist {id: $id}) 
+                query = f"""
+                MATCH (n:Artist {{id: "{id}"}}) 
+                WHERE n.user_uid = "{self.user_uid}"
                 RETURN COUNT(n) > 0 AS exists
                 """
 
             case "playlist":
-                query = """
-                MATCH (n:Playlist {id: $id}) 
+                query = f"""
+                MATCH (n:Playlist {{id: "{id}"}}) 
+                WHERE n.user_uid = "{self.user_uid}"
                 RETURN COUNT(n) > 0 AS exists
                 """
             
             case "genre":
-                query = """
-                MATCH (n:Genre {id: $id}) 
+                query = f"""
+                MATCH (n:Genre {{id: "{id}"}}) 
+                WHERE n.user_uid = "{self.user_uid}"
                 RETURN COUNT(n) > 0 AS exists
                 """
             
             case "config":
-                query = """
-                MATCH (n:Config {name: "configuration"}) 
+                query = f"""
+                MATCH (n:Config {{name: "configuration"}}) 
+                WHERE n.user_uid = "{self.user_uid}"
                 RETURN COUNT(n) > 0 AS exists
                 """
             
@@ -338,16 +383,17 @@ class Neo4jHelper:
     def checkRefreshToken(self,apiManager,utc_timestamp):
         print("In Check Refresh Token")
          # check if config node (used to store metadata/tokens) exists in DB. If not, create it
+        print(f"config exists result: {self.check_node_exists(type="config")}")
         if not self.check_node_exists(type="config"):
 
             # set initial timestamp to be 6 months in the past to ensure we are pulling as many songs as possible
             params = {
+                "user_uid": self.user_uid,
                 "last_sync_timestamp": (utc_timestamp - 15811200),
                 "refresh_token":"", 
-                "state":"",
-                "code_verifier":"",
                 "refresh_token_expired":True
             }
+            print(f"user_uid for user in checkRefresh: {self.user_uid}")
 
             self.createNode(type="config",params=params)
 
@@ -360,7 +406,7 @@ class Neo4jHelper:
             print("Fetching New Refresh Token")
             access_token, refresh_token = apiManager.getRefreshToken(Neo4jManager=self, refresh_token = refresh_token)
 
-            if (refresh_token is False):
+            if (refresh_token is None):
                 print("refresh token is expired... ")
                 logging.info('refresh token is expired... ')
 
@@ -376,26 +422,45 @@ class Neo4jHelper:
 
     # stores API refresh token into the database
     def storeRefreshToken(self,refresh_token):
-        query = """
-                MATCH (n:Config{name:"configuration"})
-                SET n.refresh_token = $refresh_token
-                RETURN n
+        print(f"neo4jManager.user_uid in storeRefresh: {self.user_uid}")
+        query = f"""
+                MATCH (n:Config{{name:"configuration"}})
+                WHERE n.user_uid = "{self.user_uid}"
+                SET n.refresh_token = "{refresh_token}"
+                RETURN n as output
                 """
-        return self.runQuery(query, params = {"refresh_token":refresh_token})
+        
+        result = self.runQuery(query)
+
+        if result is not None:
+            print("Query succeeded:", result)
+            return True
+        else:
+            print("Query failed but program is continuing.")       
+            return False
     
     # gets API refresh token from database
     def getRefreshTokenFromDB(self):
-        query = """
-        MATCH (n:Config) RETURN n.refresh_token AS refresh_token
+        query = f"""
+        MATCH (n:Config) 
+        WHERE n.user_uid = "{self.user_uid}"
+        RETURN n.refresh_token AS refresh_token
         """
 
         result = self.getResultFromDB(query=query,params={},output_values=["refresh_token"])
-        return result["refresh_token"][0]
+        print(f"result of refresh: {result}")
+        print(f"user_uid: {self.user_uid}")
+        if not result["refresh_token"]:
+            return ""
+        else:
+            return result["refresh_token"][0]
     
     # gets the Last Sync Timestamp from the Database
     def getTimestamp(self):
-        query = """
-        MATCH (n:Config) RETURN n.last_sync_timestamp AS last_sync_timestamp
+        query = f"""
+        MATCH (n:Config) 
+        WHERE n.user_uid = "{self.user_uid}"
+        RETURN n.last_sync_timestamp AS last_sync_timestamp
         """
 
         timestamp = self.getResultFromDB(query=query,params={},output_values=["last_sync_timestamp"])
@@ -406,27 +471,36 @@ class Neo4jHelper:
     
     # stores Last Sync Timestamp in Database
     def storeTimestamp(self,timestamp):
-        query = """
-                MATCH (n:Config{name: 'configuration'})
-                SET n.last_sync_timestamp = $timestamp
+        query = f"""
+                MATCH (n:Config{{name: 'configuration'}})
+                WHERE n.user_uid = "{self.user_uid}"
+                SET n.last_sync_timestamp = {timestamp}
                 RETURN n
                 """
-        return self.runQuery(query, params = {"timestamp":int(timestamp)})
+        return self.runQuery(query)
     
     def getPlayHistory(self,id,id_type):
         query = f"""
             MATCH (n:{id_type})
-            WHERE n.id = "{id}"
+            WHERE n.user_uid = "{self.user_uid}" AND n.id = "{id}"
             RETURN n.play_history AS play_history
         """
 
         result = self.getResultFromDB(query=query,params={"id":id, "id_type":id_type},output_values=["play_history"])
+        
+        if result is not None:
+            print("Query succeeded:", result)
+            return result["play_history"][0]
+        else:
+            print("Query failed but program is continuing.")       
+            return False
+
         return result["play_history"][0]
 
     def getHourOfDay(self,id,id_type):
         query = f"""
             MATCH (n:{id_type})
-            WHERE n.id = "{id}"
+            WHERE n.id = "{id}" AND n.user_uid = "{self.user_uid}"
             RETURN n.hour_of_day AS timeOfDay
         """
 
@@ -436,21 +510,33 @@ class Neo4jHelper:
     def makePath(self, pathType, node_id_a, node_id_b, node_type_a, node_type_b):
         query = f"""
             MATCH (a:{node_type_a} {{id: "{node_id_a}"}})
+            WHERE a.user_uid = "{self.user_uid}"
             WITH a
             MATCH (b:{node_type_b} {{id: "{node_id_b}"}})
+            WHERE b.user_uid = "{self.user_uid}"
             CREATE (a)-[:{pathType}]->(b)
             RETURN a,b
         """
 
         params = {
+            "user_uid": self.user_uid,
             "pathType": pathType,
             "node_id_a": node_id_a,
             "node_id_b": node_id_b,
             "node_type_a": node_type_a,
-            "node_type_b": node_type_b
+            "node_type_b": node_type_b,
+            "self.user_uid": self.user_uid
         }
 
-        return self.runQuery(query,params)
+        result = self.runQuery(query)
+
+        if result is not None:
+            print("Query succeeded:", result)
+            print(f"{pathType} path has been created between node {node_id_a} to {node_id_b}")
+            return True
+        else:
+            print("Query failed but program is continuing.")       
+            return False
 
     def createNode(self,type="",params=None):
     # Will create a new node in neo4j database based on the node_type defined and the data inputted for the selected node
@@ -481,32 +567,32 @@ class Neo4jHelper:
             case "track":
                 # Use parameterized queries to prevent Cypher injection
                 query = """
-                CREATE (n:Track {name: $name, id: $id, popularity: $popularity, preview_url: $preview_url, play_history:$play_history, hour_of_day:$hour_of_day})
+                CREATE (n:Track {user_uid: $user_uid, name: $name, id: $id, popularity: $popularity, preview_url: $preview_url, play_history:$play_history, hour_of_day:$hour_of_day})
                 """
 
             case "playlist":
                 query = """
-                CREATE (n:Playlist {name: $name, id: $id, owner_name: $owner_name, num_followers: $num_followers, play_history:$play_history, hour_of_day:$hour_of_day, image_url: $image_url})
+                CREATE (n:Playlist {user_uid: $user_uid, name: $name, id: $id, owner_name: $owner_name, num_followers: $num_followers, play_history:$play_history, hour_of_day:$hour_of_day, image_url: $image_url})
                 """
 
             case "album":
                 query = """
-                CREATE (n:Album {name: $name, id: $id, popularity: $popularity, image_url: $image_url, label: $label, play_history:$play_history, hour_of_day:$hour_of_day})
+                CREATE (n:Album {user_uid: $user_uid, name: $name, id: $id, popularity: $popularity, image_url: $image_url, label: $label, play_history:$play_history, hour_of_day:$hour_of_day})
                 """
 
             case "genre":
                 query = """
-                CREATE (n:Genre {name: $name, id: $id, play_history:$play_history, hour_of_day:$hour_of_day})
+                CREATE (n:Genre {user_uid: $user_uid, name: $name, id: $id, play_history:$play_history, hour_of_day:$hour_of_day})
                 """
             
             case "artist":
                 query = """
-                CREATE (n:Artist {name: $name, id:$id, num_followers: $num_followers, image_url: $image_url, popularity: $popularity, play_history:$play_history, hour_of_day:$hour_of_day})
+                CREATE (n:Artist {user_uid: $user_uid, name: $name, id:$id, num_followers: $num_followers, image_url: $image_url, popularity: $popularity, play_history:$play_history, hour_of_day:$hour_of_day})
                 """
             
             case "config":
                 query = """
-                CREATE (n:Config {name: "configuration", last_sync_timestamp: $last_sync_timestamp, refresh_token: $refresh_token, refresh_token_expired: $refresh_token_expired})
+                CREATE (n:Config {user_uid: $user_uid, name: "configuration", last_sync_timestamp: $last_sync_timestamp, refresh_token: $refresh_token, refresh_token_expired: $refresh_token_expired})
                 """
     
             case _:
@@ -516,12 +602,16 @@ class Neo4jHelper:
         #run query based on node_type
         result = self.runQuery(query,params)
 
-        if(type != "config"):
-            logging.info(f"Created {type} node for {type} named {params["name"]} with id {params["id"]}")
+        if result is not None:
+            
+            if(type != "config"):
+                logging.info(f"Created {type} node for {type} named {params["name"]} with id {params["id"]}")
+            else:
+                logging.info(f"config node successfully created")
+            return True
         else:
-            logging.info(f"config node successfully created")
-
-        return result
+            print("Query failed but program is continuing.")       
+            return False
 
     # function checks to see if genre path is previously created. Used to prevent duplicate paths
     # Created when a genre gets updated. 
@@ -529,15 +619,24 @@ class Neo4jHelper:
         
         query = f"""
             MATCH (a:{start_type} {{id: "{id_start}"}})
+            WHERE a.user_uid = "{self.user_uid}"
             WITH a
             MATCH (b:{end_type} {{id: "{id_end}"}})
+            WHERE b.user_uid = "{self.user_uid}"
             RETURN EXISTS((a)-[:{path_name}*1..2]-(b)) AS pathExists
         """
 
         result = self.getResultFromDB(query=query,params={},output_values=["pathExists"])
-        print(f"Path Exists Result: {result["pathExists"][0]}")
 
-        return result["pathExists"][0]
+        if result is not None:
+            print("Query succeeded:", result)
+            if result['pathExists']:
+                return result["pathExists"][0]
+            else:
+                return False
+        else:
+            print("Query failed but program is continuing.")    
+            return False
     
     # function updates genres tied to a node (for albums and artists).
     def updateGenres(self,node_id,genres,node_type,timestamp,hour):
@@ -557,16 +656,25 @@ class Neo4jHelper:
 
                 query = f"""
                     MATCH (n:Genre {{id: "{genre}"}})
+                    WHERE n.user_uid = "{self.user_uid}"
                     SET n.play_history={play_history}, n.hour_of_day = {hour_of_day}
-                    RETURN n
+                    RETURN n as output
                 """
                 
-                self.runQuery(query)
+                result = self.runQuery(query)
+
+                if result is not None:
+                    print("Query succeeded:", result)
+                    return result["output"][0]
+                else:
+                    print("Query failed but program is continuing.")       
+                    return False
 
 
             # if node doesn't exist, create node
             else:
                 params = {
+                    "user_uid": self.user_uid,
                     "name": genre,
                     "id": genre,
                     "times_played": 1,
@@ -586,16 +694,6 @@ class Neo4jHelper:
 ##################################################################################################
 
 #################################### Other Helper Functions ######################################
-# Function to run the local HTTP server
-def run_local_server():
-    server = HTTPServer(('localhost', PORT), OAuthCallbackHandler)
-    print(f"Waiting for authorization response on http://localhost:{PORT}/redirect...")
-
-    server.auth_code = None
-    server.state = None
-
-    server.handle_request()  # Handles a single request and exits
-    return server.auth_code, server.state
 
 # converts a date/time to a UTC timestamp. Used to convert the "played_at" time returned
 # to a numeric timestamp instead of a string
@@ -748,12 +846,18 @@ def convertJSON(api_json, type):
     
         case "artist":
 
+            images = api_json.get("images", [])
+            if images and len(images) > 0:
+                image_url = images[0].get("url", "")
+            else:
+                image_url = ""  # or some default value
+
             # use function to create new object
             results[api_json["id"]] = createArtistDict(
                 name=api_json.get("name", "Unknown"),
                 popularity=api_json.get("popularity", 0),
                 genres=api_json.get("genres", []),
-                image_url = api_json.get("images", [{}])[0].get("url", ""),
+                image_url = image_url,
                 num_followers=api_json.get("followers", {}).get("total", 0)
             )
         
@@ -780,7 +884,7 @@ def convertJSON(api_json, type):
     return results
 
 # the main function that pulls API data into DB. Made separate from main function so that it can be run in main app file.
-def API2DB(access_token = "", refresh_token="", utc_timestamp="",my_bar = None):
+def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_bar = None):
      # Configure the logger
     logging.basicConfig(
         filename='Logs/Spotify2DBPythonScriptLogs.log',          # Log file name
@@ -791,7 +895,7 @@ def API2DB(access_token = "", refresh_token="", utc_timestamp="",my_bar = None):
 
     # instantiate apiHelper and neo4jHelper to make API and DB calls
     apiManager = apiHelper("",headers = None, params = None)
-    neo4jManager = Neo4jHelper()
+    neo4jManager = Neo4jHelper(user_uid=user_uid)
 
     # check if config node (used to store metadata/tokens) exists in DB. If not, create it
     if(access_token == ""):
@@ -799,7 +903,7 @@ def API2DB(access_token = "", refresh_token="", utc_timestamp="",my_bar = None):
           
     # get current UTC timestamp if timestamp isn't given
     if(utc_timestamp == ""):
-            # Get the current UTC time
+        # Get the current UTC time
         current_utc_time = datetime.now(timezone.utc)
 
         # Convert to a UNIX timestamp
@@ -813,7 +917,11 @@ def API2DB(access_token = "", refresh_token="", utc_timestamp="",my_bar = None):
     #if access token isn't able to get pulled, throw an error and store metric in DB to tell front end that refresh token is expired
     if access_token is False:
         st.error('Error: access token was unable to be pulled.. this likely means the refresh token is expired. Rerun so user can reauthorize', icon=":material/sentiment_dissatisfied:")
-        neo4jManager.storeRefreshTokenExpired(True)
+        if neo4jManager.storeRefreshTokenExpired(True):
+            print("refresh token expired state successfully stored")
+        else:
+            print("Error: Refresh Token Expired State not successfully stored")
+
         return "refreshTokenExpired"
     else:
         neo4jManager.storeRefreshTokenExpired(False)
@@ -838,14 +946,12 @@ def API2DB(access_token = "", refresh_token="", utc_timestamp="",my_bar = None):
     # get the timestamp associated with the last play time for the song most recently played in DB
     last_sync_timestamp = neo4jManager.getTimestamp()
 
-    # store timestamp of last synced song in DB
-    neo4jManager.storeTimestamp(int(utc_timestamp))
+    if my_bar is not None:
+        # used to adjust progress bar
+        progress_delta = int(100 / len(recently_played_tracks))
 
-    # used to adjust progress bar
-    progress_delta = int(100 / len(recently_played_tracks))
-
-    # passed along to progress bar to denote how much progress has passed
-    progress_value = 0
+        # passed along to progress bar to denote how much progress has passed
+        progress_value = 0
 
     # ETL code. Extracts API info, converts it into objects that are then loaded to Graph Database
     for track in list(recently_played_tracks.keys()):
@@ -876,14 +982,22 @@ def API2DB(access_token = "", refresh_token="", utc_timestamp="",my_bar = None):
 
                 query = f"""
                     MATCH (n:Track {{id: "{track}"}})
+                    WHERE n.user_uid = "{user_uid}"
                     SET n.popularity={popularity}, n.preview_url="{preview_url}", n.play_history={play_history}, n.hour_of_day={hour_of_day}
-                    RETURN n
+                    RETURN n as output
                 """
                 
                 result = neo4jManager.runQuery(query)
+
+                if result is not None:
+                    print("Query succeeded:", result)
+                else:
+                    print("Query failed but program is continuing.")       
+                
             else:
                 # if the track doesn't exist, create a new node
                 params = {
+                    "user_uid": user_uid,
                     "name": recently_played_tracks[track]["name"],
                     "id": track,
                     "play_history": [played_at_timestamp],
@@ -923,13 +1037,21 @@ def API2DB(access_token = "", refresh_token="", utc_timestamp="",my_bar = None):
 
                     query = f"""
                         MATCH (n:Album {{id: "{album_id}"}})
+                        WHERE n.user_uid = "{user_uid}"
                         SET n.image_url="{image_url}", n.label="{label}", n.popularity={popularity}, n.image_url="{image_url}", n.play_history={play_history}, n.hour_of_day={hour_of_day}
-                        RETURN n
+                        RETURN n as output
                     """
 
-                    neo4jManager.runQuery(query)
+                    result = neo4jManager.runQuery(query)
+
+                    if result is not None:
+                        print("Query succeeded:", result)
+                    else:
+                        print("Query failed but program is continuing.")       
+
                 else:
                     params = {
+                        "user_uid": user_uid,
                         "name": album_results["name"],
                         "id": album_id,
                         "image_url": album_results["image_url"],
@@ -985,15 +1107,22 @@ def API2DB(access_token = "", refresh_token="", utc_timestamp="",my_bar = None):
                         # Update artist fields
                         query = f"""
                             MATCH (n:Artist {{id: "{artist_id}"}})
+                            WHERE n.user_uid = "{user_uid}"
                             SET n.popularity={popularity}, n.image_url="{image_url}", n.num_followers="{num_followers}", n.play_history={play_history}, n.hour_of_day={hour_of_day}
                             RETURN n
                         """
 
                         result = neo4jManager.runQuery(query)
 
+                        if result is not None:
+                            print("Query succeeded:", result)
+                        else:
+                            print("Query failed")  
+
                     else:
 
                         params = {
+                            "user_uid": user_uid,
                             "name":artist_results[artist_id]["name"],
                             "popularity": artist_results[artist_id]["popularity"],
                             "id": artist_id,
@@ -1050,15 +1179,23 @@ def API2DB(access_token = "", refresh_token="", utc_timestamp="",my_bar = None):
 
                         query = f"""
                             MATCH (n:Playlist {{id: "{playlist_id}"}})
+                            WHERE n.user_uid = "{user_uid}"
                             SET n.num_followers={num_followers}, n.play_history={play_history}, n.hour_of_day={hour_of_day}, n.image_url="{image_url}", n.description="{description}", n.image_url="{image_url}"
                             RETURN n
                         """
 
                         result = neo4jManager.runQuery(query)
+
+                        if result is not None:
+                            print("Query succeeded:", result)
+                        else:
+                            print("Query failed")  
+
                     
                     # if not in DB create node
                     else:
                         params={
+                            "user_uid": user_uid,
                             "name": playlist_results["name"],
                             "description": playlist_results["description"],
                             "num_followers": playlist_results["num_followers"],
@@ -1073,8 +1210,15 @@ def API2DB(access_token = "", refresh_token="", utc_timestamp="",my_bar = None):
 
                     if not neo4jManager.doesPathExist(track,playlist_id,"Track","Playlist","IN_PLAYLIST"):
                         neo4jManager.makePath("IN_PLAYLIST",track,playlist_id,"Track","Playlist")
-        progress_value = progress_value + progress_delta
-        my_bar.progress(progress_value, text = "Loading Tracks... Please Wait")
+
+        # set progress bar if loading from streamlit app                
+        if my_bar is not None:
+            progress_value = progress_value + progress_delta
+            my_bar.progress(progress_value, text = "Loading Tracks... Please Wait")
+
+    # store timestamp of last synced song in DB
+    neo4jManager.storeTimestamp(int(utc_timestamp))
+
     # remove refresh and acccess token from memory
     refresh_token = ""
     access_token = ""
@@ -1085,9 +1229,28 @@ def API2DB(access_token = "", refresh_token="", utc_timestamp="",my_bar = None):
 
 #################################### Main Function #################################
 
-# run function that pulls data into DB
+# run function that pulls data for all user containers. Will be main script that runs on web app container daily
 def main():
-    API2DB()
+    try: 
+        client = MongoClient(f"""mongodb://{st.secrets["user_database"]["username"]}:{st.secrets["user_database"]["password"]}@localhost:27017/userDB""")
+        db = client['userDB']
+        collection = db['listings']
+
+        results = collection.find({}, {"email": 1, "user_uid":1, "refresh_token":1, "spotify_logged_in":1, "_id": 0})  # Exclude `_id`
+
+        # Convert to a list of dictionaries
+        data_list = list([doc for doc in results])
+
+        client.close()
+        
+        
+        for doc in data_list:
+            print(f"for user_uid: {doc['user_uid']}, spotify_logged_in is {doc['spotify_logged_in']}")
+            if doc["spotify_logged_in"] == True:
+                API2DB(user_uid=doc['user_uid'])
+    
+    except Exception as e:
+        print(f"An Error has occured: {e}")
 
 ############################################################################################
 #instantiate special variable
