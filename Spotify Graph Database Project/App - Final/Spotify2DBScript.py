@@ -50,8 +50,6 @@ class apiHelper():
     def getAuthCodeURL(state):
         code_verifier = pkce.generate_code_verifier(length=128)
         code_challenge = pkce.get_code_challenge(code_verifier)
-
-        print(f"The Code Challenge Generated is: {code_challenge}")
         
         # Build the authorization URL with PKCE and state variable
         params = {
@@ -307,7 +305,6 @@ class Neo4jHelper:
 
     # pulls Boolean indicator that indicates whether a refresh token is expired or not
     def storeRefreshTokenExpired(self,value):
-        print(f"user_uid in storeRefresh: {self.user_uid}")
         
         query = f"""
             MATCH (n:Config)
@@ -319,7 +316,6 @@ class Neo4jHelper:
         result = self.getResultFromDB(query,params = {"value":value},output_values=["output"])
         
         if result is not None:
-            print("Query succeeded:", result)
             return True
 
         else:
@@ -381,9 +377,8 @@ class Neo4jHelper:
     # function is used to determine whether we have a valid refresh token. Function will also reauthorize the API if the variable authAPI is set to True (done by default)
     # if the refresh token exists in the DB, then we will assume it is valid. Error handling in App.py will deal with exception of an expired refresh token
     def checkRefreshToken(self,apiManager,utc_timestamp):
-        print("In Check Refresh Token")
+
          # check if config node (used to store metadata/tokens) exists in DB. If not, create it
-        print(f"config exists result: {self.check_node_exists(type="config")}")
         if not self.check_node_exists(type="config"):
 
             # set initial timestamp to be 6 months in the past to ensure we are pulling as many songs as possible
@@ -393,7 +388,6 @@ class Neo4jHelper:
                 "refresh_token":"", 
                 "refresh_token_expired":True
             }
-            print(f"user_uid for user in checkRefresh: {self.user_uid}")
 
             self.createNode(type="config",params=params)
 
@@ -422,7 +416,7 @@ class Neo4jHelper:
 
     # stores API refresh token into the database
     def storeRefreshToken(self,refresh_token):
-        print(f"neo4jManager.user_uid in storeRefresh: {self.user_uid}")
+
         query = f"""
                 MATCH (n:Config{{name:"configuration"}})
                 WHERE n.user_uid = "{self.user_uid}"
@@ -433,7 +427,6 @@ class Neo4jHelper:
         result = self.runQuery(query)
 
         if result is not None:
-            print("Query succeeded:", result)
             return True
         else:
             print("Query failed but program is continuing.")       
@@ -448,8 +441,6 @@ class Neo4jHelper:
         """
 
         result = self.getResultFromDB(query=query,params={},output_values=["refresh_token"])
-        print(f"result of refresh: {result}")
-        print(f"user_uid: {self.user_uid}")
         if not result["refresh_token"]:
             return ""
         else:
@@ -489,10 +480,8 @@ class Neo4jHelper:
         result = self.getResultFromDB(query=query,params={"id":id, "id_type":id_type},output_values=["play_history"])
         
         if result is not None:
-            print("Query succeeded:", result)
             return result["play_history"][0]
-        else:
-            print("Query failed but program is continuing.")       
+        else:    
             return False
 
         return result["play_history"][0]
@@ -531,7 +520,6 @@ class Neo4jHelper:
         result = self.runQuery(query)
 
         if result is not None:
-            print("Query succeeded:", result)
             print(f"{pathType} path has been created between node {node_id_a} to {node_id_b}")
             return True
         else:
@@ -629,7 +617,6 @@ class Neo4jHelper:
         result = self.getResultFromDB(query=query,params={},output_values=["pathExists"])
 
         if result is not None:
-            print("Query succeeded:", result)
             if result['pathExists']:
                 return result["pathExists"][0]
             else:
@@ -664,7 +651,6 @@ class Neo4jHelper:
                 result = self.runQuery(query)
 
                 if result is not None:
-                    print("Query succeeded:", result)
                     return result["output"][0]
                 else:
                     print("Query failed but program is continuing.")       
@@ -899,6 +885,12 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
 
     # check if config node (used to store metadata/tokens) exists in DB. If not, create it
     if(access_token == ""):
+        refresh_token = neo4jManager.getRefreshTokenFromDB()
+
+        # exit function if refresh token is not in database
+        if refresh_token == "":
+            return
+
         access_token,refresh_token = apiManager.getRefreshToken(Neo4jManager=neo4jManager,refresh_token=neo4jManager.getRefreshTokenFromDB())
           
     # get current UTC timestamp if timestamp isn't given
@@ -990,7 +982,7 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
                 result = neo4jManager.runQuery(query)
 
                 if result is not None:
-                    print("Query succeeded:", result)
+                    print("Query succeeded")
                 else:
                     print("Query failed but program is continuing.")       
                 
@@ -1045,7 +1037,7 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
                     result = neo4jManager.runQuery(query)
 
                     if result is not None:
-                        print("Query succeeded:", result)
+                        print("Query succeeded")
                     else:
                         print("Query failed but program is continuing.")       
 
@@ -1115,7 +1107,7 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
                         result = neo4jManager.runQuery(query)
 
                         if result is not None:
-                            print("Query succeeded:", result)
+                            print("Query succeeded")
                         else:
                             print("Query failed")  
 
@@ -1187,7 +1179,7 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
                         result = neo4jManager.runQuery(query)
 
                         if result is not None:
-                            print("Query succeeded:", result)
+                            print("Query succeeded")
                         else:
                             print("Query failed")  
 
@@ -1232,11 +1224,12 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
 # run function that pulls data for all user containers. Will be main script that runs on web app container daily
 def main():
     try: 
+        # pull all users from DB. Will then iterate through all, and if refresh token exists, update the db for that user
         client = MongoClient(f"""mongodb://{st.secrets["user_database"]["username"]}:{st.secrets["user_database"]["password"]}@localhost:27017/userDB""")
         db = client['userDB']
         collection = db['listings']
 
-        results = collection.find({}, {"email": 1, "user_uid":1, "refresh_token":1, "spotify_logged_in":1, "_id": 0})  # Exclude `_id`
+        results = collection.find({}, {"email": 1, "user_uid":1, "_id": 0})  # Exclude `_id`
 
         # Convert to a list of dictionaries
         data_list = list([doc for doc in results])
@@ -1245,9 +1238,8 @@ def main():
         
         
         for doc in data_list:
-            print(f"for user_uid: {doc['user_uid']}, spotify_logged_in is {doc['spotify_logged_in']}")
-            if doc["spotify_logged_in"] == True:
-                API2DB(user_uid=doc['user_uid'])
+            print(f"updating DB for user {doc['user_uid']}")
+            API2DB(user_uid = doc['user_uid'])
     
     except Exception as e:
         print(f"An Error has occured: {e}")

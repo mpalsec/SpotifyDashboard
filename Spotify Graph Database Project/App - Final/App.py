@@ -11,7 +11,6 @@ import matplotlib.pyplot as plt
 import altair as alt
 import bcrypt
 from pymongo import MongoClient
-import docker
 import string
 import uuid
 import secrets
@@ -833,10 +832,6 @@ def main():
             # set page_state to be 0 to allow for Spotify to pull the refresh token in the 0th page state
             st.session_state['page_state'] = 0
             st.session_state['streamlitLoggedIn'] = True
-
-            print(f"name: {st.session_state['user_name']}")
-            print(f"user_uid: {st.session_state['user_uid']}")
-            print(f"user_email: {st.session_state['user_email']}")
         
         # state mismatch if a state cant be found in db
         else:
@@ -952,9 +947,6 @@ def main():
                 print("getting access token to sync\n")
                 access_token, refresh_token = apiManager.getRefreshToken(Neo4jManager=neo4jManager,auth_code=st.query_params['code'],code_verifier=result['code_verifier'])
 
-                print(f"access_token: {access_token}")
-                print(f"refresh_token: {refresh_token}")
-
                 #if access token isn't able to get pulled, throw an error and store metric in DB to tell front end that refresh token is expired
                 if access_token is None:
                     st.error('Error: access token was unable to be pulled.. this likely means the refresh token is expired. Rerun so user can reauthorize', icon=":material/sentiment_dissatisfied:")
@@ -971,6 +963,10 @@ def main():
                 st.session_state['streamlitLoggedIn'] = True
                 st.query_params.clear()
                 st.balloons()
+
+                access_token = ""
+                refresh_token = ""
+                
                 print(f"page_state: {st.session_state['page_state']}")
 
                 st.rerun()
