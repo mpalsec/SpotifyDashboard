@@ -10,6 +10,9 @@ import streamlit as st
 import logging
 from pymongo import MongoClient
 from neo4j.exceptions import Neo4jError
+import smtplib
+import traceback
+from email.mime.text import MIMEText
 
 ################################### Code To Pull Auth Code/Token ##################################
 # This Portion of the Code Does The Following:
@@ -37,6 +40,10 @@ PORT = 8000
 
 # endpoints
 GET_RECENTLY_PLAYED_URL = 'https://api.spotify.com/v1/me/player/recently-played'
+
+# variables that dictate where error emails are sent from and sent to
+sender = "spotify-app@mpalsec.com" 
+receiver = "mpalmail@protonmail.com"
 
 ####################################    Classes    ######################################
 
@@ -869,6 +876,29 @@ def convertJSON(api_json, type):
         
     return results
 
+# function is used to send errors to mpalmail@protonmail.com to ensure service is running as expected
+def mailtrap_error_handler(main_func):
+    def wrapper(*args, **kwargs):
+        try:
+            return main_func(*args, **kwargs)
+        except Exception as e:
+            error_msg = f"Error in main(): {e}\n\nTraceback:\n{traceback.format_exc()}"
+            print(error_msg)
+            
+            # Prepare the email message
+            msg = MIMEText(error_msg)
+            msg['Subject'] = "Spotify2DBScript Error"
+            msg['From'] = sender
+            msg['To'] = receiver
+
+            # Send the email using Mailtrap
+            with smtplib.SMTP("live.smtp.mailtrap.io", 587) as server:
+                server.starttls()
+                server.login("api", st.secrets['mailtrap']['api_token'])
+                server.sendmail(sender, receiver, msg.as_string())
+            return None
+    return wrapper
+
 # the main function that pulls API data into DB. Made separate from main function so that it can be run in main app file.
 def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_bar = None):
      # Configure the logger
@@ -1222,27 +1252,26 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
 #################################### Main Function #################################
 
 # run function that pulls data for all user containers. Will be main script that runs on web app container daily
+@mailtrap_error_handler
 def main():
-    try: 
-        # pull all users from DB. Will then iterate through all, and if refresh token exists, update the db for that user
-        client = MongoClient(f"""mongodb://{st.secrets["user_database"]["username"]}:{st.secrets["user_database"]["password"]}@localhost:27017/userDB""")
-        db = client['userDB']
-        collection = db['listings']
 
-        results = collection.find({}, {"email": 1, "user_uid":1, "_id": 0})  # Exclude `_id`
+    # pull all users from DB. Will then iterate through all, and if refresh token exists, update the db for that user
+    client = MongoClient(f"""mongodb://{st.secrets["user_database"]["username"]}:{st.secrets["user_database"]["password"]}@localhost:27017/userDB""")
+    db = client['userDB']
+    collection = db['listings']
 
-        # Convert to a list of dictionaries
-        data_list = list([doc for doc in results])
+    results = collection.find({}, {"email": 1, "user_uid":1, "_id": 0})  # Exclude `_id`
 
-        client.close()
-        
-        
-        for doc in data_list:
-            print(f"updating DB for user {doc['user_uid']}")
-            API2DB(user_uid = doc['user_uid'])
+    # Convert to a list of dictionaries
+    data_list = list([doc for doc in results])
+
+    client.close()
     
-    except Exception as e:
-        print(f"An Error has occured: {e}")
+    
+    for doc in data_list:
+        print(f"updating DB for user {doc['user_uid']}")
+        API2DB(user_uid = doc['user_uid'])
+
 
 ############################################################################################
 #instantiate special variable

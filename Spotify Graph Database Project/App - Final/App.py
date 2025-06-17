@@ -15,10 +15,17 @@ import string
 import uuid
 import secrets
 import base64
+import smtplib
+import traceback
+from email.mime.text import MIMEText
 
 # initialize Neo4jHelper for making db queries, along w/ an apiHelper for spotify API calls and docker for creating new neo4j DBs
 neo4jManager = Neo4jHelper(user_uid="")
 apiManager = apiHelper()
+
+# variables that dictate where error emails are sent from and sent to
+sender = "spotify-app@mpalsec.com" 
+receiver = "mpalmail@protonmail.com"
 
 def nav_to_auth_url(auth_url):
     nav_script = """
@@ -54,52 +61,73 @@ def generate_state_parameter(length=32):
     state = base64.urlsafe_b64encode(random_bytes).rstrip(b'=').decode('ascii')
     return state
 
+# function is used to send errors to mpalmail@protonmail.com to ensure service is running as expected
+def mailtrap_error_handler(main_func):
+    def wrapper(*args, **kwargs):
+        try:
+            return main_func(*args, **kwargs)
+        except Exception as e:
+            error_msg = f"Error in main(): {e}\n\nTraceback:\n{traceback.format_exc()}"
+            print(error_msg)
+            
+            # Prepare the email message
+            msg = MIMEText(error_msg)
+            msg['Subject'] = "Spotify2DBScript Error"
+            msg['From'] = sender
+            msg['To'] = receiver
+
+            # Send the email using Mailtrap
+            with smtplib.SMTP("live.smtp.mailtrap.io", 587) as server:
+                server.starttls()
+                server.login("api", st.secrets['mailtrap']['api_token'])
+                server.sendmail(sender, receiver, msg.as_string())
+            return None
+    return wrapper
+
+
 # runs a mongo query. query type can either be "find_one" (look for one entry), "find" (look for multiple entries), or "delete" (delete entries based on query), 
 # and is used to determine the type of query that will be run. For the "create" query_type, the query is the document that will be added to the database.
 # projection is used in conjunction with the "find" or "find_one" queries, and is a dictionary that outlines which fields should be returned from the document
+@mailtrap_error_handler
 def run_query(query, query_type, database_name, collection_name, update={}, projection={}):
-    try:   
-        client = MongoClient(f"""mongodb://{st.secrets["user_database"]["username"]}:{st.secrets["user_database"]["password"]}@localhost:27017/userDB""")
-        db = client[database_name]
-        collection = db[collection_name]
+    client = MongoClient(f"""mongodb://{st.secrets["user_database"]["username"]}:{st.secrets["user_database"]["password"]}@localhost:27017/userDB""")
+    db = client[database_name]
+    collection = db[collection_name]
 
-        if query_type == "find":
-            print("in find")
-            if projection == {}:
-                result = list(collection.find(query))
-            else:
-                result = list(collection.find(query, projection))
-
-        elif query_type == "delete":
-            # delete document
-            result = collection.delete_many(query)
-
-            if result.deleted_count > 0:
-                print("Successfully Deleted!")
-                result = True
-            else:
-                print("no matching document found to delete")
-                result = False
-
-        elif query_type == "create":
-            result = list(collection.insert_one(query))
-
-        elif query_type == "update":
-            #print(f"update: {update}")
-            result_not_passed = collection.update_one(query, {"$set": update})
-
+    if query_type == "find":
+        print("in find")
+        if projection == {}:
             result = list(collection.find(query))
-
         else:
-            print("Error: invalid query_type")
-            return {}
-        
-        client.close()
-        return result[0]
-    
-    except Exception as e:
-        print(f"An Error has occured while making Mongo Query: {e}")
+            result = list(collection.find(query, projection))
+
+    elif query_type == "delete":
+        # delete document
+        result = collection.delete_many(query)
+
+        if result.deleted_count > 0:
+            print("Successfully Deleted!")
+            result = True
+        else:
+            print("no matching document found to delete")
+            result = False
+
+    elif query_type == "create":
+        result = list(collection.insert_one(query))
+
+    elif query_type == "update":
+        #print(f"update: {update}")
+        result_not_passed = collection.update_one(query, {"$set": update})
+
+        result = list(collection.find(query))
+
+    else:
+        print("Error: invalid query_type")
         return {}
+    
+    client.close()
+    return result[0]
+    
 
 # checks to see if password provided matches the hash in database
 def validate_password(email, password):
@@ -783,6 +811,7 @@ def makeGenrePieChart(favoriteGenres):
 
 
 ########################################################### Main ##################################################################
+@mailtrap_error_handler
 def main():
     st.set_page_config(layout="wide")
 
@@ -1276,6 +1305,17 @@ def main():
                         st.session_state['success_message'] = "Login Successfully Created"
                         st.session_state["user_email"] = email
                         st.session_state['page_state'] = 2
+                         # Prepare the email message
+                        msg = MIMEText(f"New User Was Created: {st.session_state['user_email']}")
+                        msg['Subject'] = "New User Added to Spotify App"
+                        msg['From'] = sender
+                        msg['To'] = receiver
+
+                        # Send the email using Mailtrap
+                        with smtplib.SMTP("live.smtp.mailtrap.io", 587) as server:
+                            server.starttls()
+                            server.login("api", st.secrets['mailtrap']['api_token'])
+                            server.sendmail(sender, receiver, msg.as_string())
                     else:
                         st.session_state["error_message"] = "Error: User Already Exists. Please Enter a Different Email"
                         st.session_state['success_message'] = ""
@@ -1291,6 +1331,8 @@ def main():
 
     else:
         st.write(st.session_state["error_message"])
+    
+    return 0
     
 #============================================================================================================================================================
 if __name__ == "__main__":
