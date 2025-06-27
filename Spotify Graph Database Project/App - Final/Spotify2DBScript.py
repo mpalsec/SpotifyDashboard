@@ -933,7 +933,7 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
     
     # Create Auth header w/ access token
     headers = {
-        'Authorization': f'Bearer {access_token}',
+        'Authorization': f"Bearer {access_token}",
     }
 
     #if access token isn't able to get pulled, throw an error and store metric in DB to tell front end that refresh token is expired
@@ -962,7 +962,7 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
     with open("Logs/recently_played_tracks.json","w") as json_file:
         json.dump(recently_played_tracks,json_file,indent=4) 
 
-    logging.info(f'Successfully Pulled Recently Played List. There are {len(recently_played_tracks)}')
+    logging.info(f"Successfully Pulled Recently Played List. There are {len(recently_played_tracks)}")
     
 
     # get the timestamp associated with the last play time for the song most recently played in DB

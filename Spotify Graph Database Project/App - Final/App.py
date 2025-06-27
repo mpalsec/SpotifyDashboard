@@ -782,7 +782,7 @@ def createFavoritesCol(user_uid, node_type, number_of_entries):
 
             # Create clickable text using HTML
             st.markdown(
-                f'<a href="{link}" target="_blank">{results['name'][i]}</a>',
+                f"<a href="{link}" target="_blank">{results['name'][i]}</a>",
                 unsafe_allow_html=True
             )
         
@@ -822,7 +822,7 @@ def main():
     # Load the CSS file
     cssFile = "style.css"
     with open(cssFile) as f:
-        st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 
 # ================================================== Login Code ==================================================================
