@@ -1076,11 +1076,11 @@ def main():
 
                 makeTooltip(text_next_to_icon=f"Recency Engagement Score: {getRecencyEngagementScore(current_timestamp=utc_timestamp, user_uid=st.session_state['user_uid'])}%",tooltip_text="Recency Engagement Score Ranges From 0 to 100, and Quantifies the Ratio of Tracks You've Listened to Recently vs. All The Tracks You've Listened")
 
-                makeTooltip(text_next_to_icon=f"Total Tracks Listened To: {getTotalNodes(user_uid=st.session_state['user_uid'], node_type="Track")}",tooltip_text="Total Tracks You've Listened To")
+                makeTooltip(text_next_to_icon=f"Total Tracks Listened To: {getTotalNodes(user_uid=st.session_state['user_uid'], node_type='Track')}", tooltip_text="Total Tracks You've Listened To")
 
-                makeTooltip(text_next_to_icon=f"Total Albums Listened To: {getTotalNodes(user_uid=st.session_state['user_uid'], node_type="Album")}",tooltip_text="Total Albums You've Listened To")
+                makeTooltip(text_next_to_icon=f"Total Albums Listened To: {getTotalNodes(user_uid=st.session_state['user_uid'], node_type='Album')}",tooltip_text="Total Albums You've Listened To")
 
-                makeTooltip(text_next_to_icon=f"Total Genres Listened To: {getTotalNodes(user_uid=st.session_state['user_uid'], node_type="Genre")}",tooltip_text="Total Genres You've Listened To")
+                makeTooltip(text_next_to_icon=f"Total Genres Listened To: {getTotalNodes(user_uid=st.session_state['user_uid'], node_type='Genre')}",tooltip_text="Total Genres You've Listened To")
 
 
         #if refresh token is expired, then rerun page
