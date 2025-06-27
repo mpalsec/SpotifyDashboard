@@ -90,7 +90,7 @@ def mailtrap_error_handler(main_func):
 # projection is used in conjunction with the "find" or "find_one" queries, and is a dictionary that outlines which fields should be returned from the document
 @mailtrap_error_handler
 def run_query(query, query_type, database_name, collection_name, update={}, projection={}):
-    client = MongoClient(f"""mongodb://{st.secrets["user_database"]["username"]}:{st.secrets["user_database"]["password"]}@localhost:27017/userDB""")
+    client = MongoClient(f"""mongodb://{st.secrets['user_database']['username']}:{st.secrets['user_database']['password']}@localhost:27017/userDB""")
     db = client[database_name]
     collection = db[collection_name]
 
@@ -147,7 +147,7 @@ def validate_password(email, password):
 
 # function deletes a user based on their uid. Used if someone wants to delete account
 def delete_user(user_uid):
-    result = run_query({"user_uuid": user_uid}, "delete", st.secrets["user_database"]["database_name"], st.secrets["user_database"]["collection_name"])
+    result = run_query({"user_uuid": user_uid}, "delete", st.secrets['user_database']['database_name'], st.secrets['user_database']['collection_name'])
 
     # delete all nodes in DB associated with user
     neo4j_result = neo4jManager.deleteUserNodes(user_uid)
@@ -161,7 +161,7 @@ def delete_user(user_uid):
         print(f"Error: received error while trying to delete mongo document for user with id {user_uid}")
 
 def logout_user(user_uid):
-    result = run_query({"user_uuid": user_uid}, "update", st.secrets["user_database"]["database_name"], st.secrets["user_database"]["collection_name"],update={"streamlit_logged_in":False})
+    result = run_query({"user_uuid": user_uid}, "update", st.secrets['user_database']['database_name'], st.secrets['user_database']['collection_name'],update={"streamlit_logged_in":False})
 
 
 # creates a new user in mongodb user database
@@ -203,7 +203,7 @@ def create_new_user(email, first_name,last_name, password, current_timestamp):
             "streamlit_logged_in": True
         }
 
-        result = run_query(document, "create", st.secrets["user_database"]["database_name"], st.secrets["user_database"]["collection_name"])
+        result = run_query(document, "create", st.secrets['user_database']['database_name'], st.secrets['user_database']['collection_name'])
 
         print(f"user with email: {email} was successfully created")
 
@@ -211,7 +211,7 @@ def create_new_user(email, first_name,last_name, password, current_timestamp):
 
 # function updates an attribute with the value added to "attribute value" on the user document for the given email
 def update_user_attribute(email, updates):
-    result = run_query({"email":email}, "update", st.secrets["user_database"]["database_name"], st.secrets["user_database"]["collection_name"], update=updates)
+    result = run_query({"email":email}, "update", st.secrets['user_database']['database_name'], st.secrets['user_database']['collection_name'], update=updates)
 
     # Check if the update was successful
     if result.matched_count:
@@ -221,27 +221,27 @@ def update_user_attribute(email, updates):
 
 def store_spotify_user(results):
     updates = {
-        "spotify_email": results["email"],
-        "num_followers": results["followers"]["total"],
-        "spotify_user_country": results["country"],
-        "spotify_display_name":results["display_name"]
+        "spotify_email": results['email'],
+        "num_followers": results['followers']['total'],
+        "spotify_user_country": results['country'],
+        "spotify_display_name":results['display_name']
     }
 
     update_user_attribute(updates)
 
 # pulls credentials of database based on email
 def get_user_uid(email):
-    result = run_query({"email": email}, "find", st.secrets["user_database"]["database_name"], st.secrets["user_database"]["collection_name"], projection={"user_uid":1, "_id":0})
+    result = run_query({"email": email}, "find", st.secrets['user_database']['database_name'], st.secrets['user_database']['collection_name'], projection={"user_uid":1, "_id":0})
     print(f"user_uid result: {result}")
     if not result:
         print(f"Error: {email} not in Mongo DB")
         return None
     else:
-        return result["user_uid"]
+        return result['user_uid']
 
 # used to pull the state and code_verifier values when performing authentication
 def get_auth_variables(state):
-    results = run_query({"state": state}, "find", st.secrets["user_database"]["database_name"], st.secrets["user_database"]["collection_name"], projection={"user_uid":1, "code_verifier":1, "email":1, "name":1, "_id":0})
+    results = run_query({"state": state}, "find", st.secrets['user_database']['database_name'], st.secrets['user_database']['collection_name'], projection={"user_uid":1, "code_verifier":1, "email":1, "name":1, "_id":0})
 
     if not results:
         print("Error: email does not exist")
@@ -327,9 +327,9 @@ def getNumberTracks(user_uid):
         RETURN count(t) AS track_count;
     """
 
-    result = neo4jManager.getResultFromDB(query,params={},output_values=["track_count"])
+    result = neo4jManager.getResultFromDB(query,params={},output_values=['track_count'])
     print(f"number of tracks array: {result}")
-    return result["track_count"][0]
+    return result['track_count'][0]
 
 # function calculates the user's recency engagement score (RES). This score is a way of measuring
 # the ratio of tracks that the user has listened to in total vs the tracks that a user has listened to in the past 90 days
@@ -343,10 +343,10 @@ def getRecencyEngagementScore(current_timestamp, user_uid):
         RETURN COUNT(n) AS totalCount
     """
 
-    result = neo4jManager.getResultFromDB(query, params={"start_time":start_time,"current_timestamp":current_timestamp}, output_values=["totalCount"])
+    result = neo4jManager.getResultFromDB(query, params={"start_time":start_time,"current_timestamp":current_timestamp}, output_values=['totalCount'])
     totalTracks = getNumberTracks(user_uid)
 
-    return round((result["totalCount"][0]/totalTracks)*100,0)
+    return round((result['totalCount'][0]/totalTracks)*100,0)
 
 # function gets the total number of nodes that exist for a specific node_type
 @st.cache_data
@@ -362,15 +362,15 @@ def getTotalNodes(node_type,user_uid):
         'node_type':node_type
     }
 
-    result = neo4jManager.getResultFromDB(query, params, output_values=["totalCount"])
-    return result["totalCount"][0]
+    result = neo4jManager.getResultFromDB(query, params, output_values=['totalCount'])
+    return result['totalCount'][0]
 
 @st.cache_data
 def createNeo4jGraph(query):
     # Neo4j connection details
-    neo4j_uri = f"bolt://{st.secrets["neo4j_database"]["host"]}:{st.secrets["neo4j_database"]["port"]}"
-    neo4j_user = st.secrets["neo4j_database"]["username"]
-    neo4j_password = st.secrets["neo4j_database"]["password"]
+    neo4j_uri = f"bolt://{st.secrets['neo4j_database']['host']}:{st.secrets['neo4j_database']['port']}"
+    neo4j_user = st.secrets['neo4j_database']['username']
+    neo4j_password = st.secrets['neo4j_database']['password']
 
     # Render the graph in Streamlit
     st.components.v1.html(
@@ -584,10 +584,10 @@ def getListensOverTime(user_uid, start_time,end_time,measure_type,granularity = 
         elif(measure_type == "Past 7 Days"):
             x = local_datetime.strftime('%A, %b %d')
 
-        result = neo4jManager.getResultFromDB(query, params, ["totalCount"])         
+        result = neo4jManager.getResultFromDB(query, params, ['totalCount'])         
 
         data['Time'].append(x)
-        data['Listens'].append(result["totalCount"][0])
+        data['Listens'].append(result['totalCount'][0])
 
         # set previous start time to be the end time
         end_time = start_time
@@ -628,11 +628,11 @@ def getFavorites(user_uid, node_type, number_of_entries = 5):
         """
 
         params = {"node_type":node_type, "num_of_entries":number_of_entries}
-        result = neo4jManager.getResultFromDB(query,params,["name","listens"])
+        result = neo4jManager.getResultFromDB(query,params,['name","listens'])
 
-        for i in range(len(result["name"])):
-            data["name"].append(result["name"][i])
-            data["listens"].append(result["listens"][i])
+        for i in range(len(result['name'])):
+            data['name'].append(result['name'][i])
+            data['listens'].append(result['listens'][i])
 
         df = pd.DataFrame(data)    
         print(f"Dataframe: {df}")
@@ -646,8 +646,8 @@ def calculateObscurityScore(user_uid):
         WHERE n.popularity IS NOT NULL AND n.user_uid = "{user_uid}"
         RETURN round(avg(n.popularity)) AS obscurityScore
     """
-    result = neo4jManager.getResultFromDB(query, params={}, output_values=["obscurityScore"])
-    return int(result["obscurityScore"][0])
+    result = neo4jManager.getResultFromDB(query, params={}, output_values=['obscurityScore'])
+    return int(result['obscurityScore'][0])
 
 @st.cache_data
 def calculateDiversityScore(user_uid):
@@ -663,7 +663,7 @@ def getRecentlyPlayed(user_uid,node_type,current_time,lookback_time):
     #print(f"end_time: {current_time}")
     query = f"""
         MATCH (n:{node_type})
-        WITH n, [value IN n.play_history WHERE value >= {start_time} AND value <= {current_time} AND n.user_uid = "{user_uid}"] AS matchingValues
+        WITH n, [value IN n.play_history WHERE value >= {start_time} AND value <= {current_time} AND n.user_uid = "{user_uid}'] AS matchingValues
         WHERE size(matchingValues) > 0  
         RETURN n.name AS recentlyPlayed
     """
@@ -674,15 +674,15 @@ def getRecentlyPlayed(user_uid,node_type,current_time,lookback_time):
         'end_time': current_time
     }
 
-    result = neo4jManager.getResultFromDB(query, params, output_values=["recentlyPlayed"])
-    return result["recentlyPlayed"]
+    result = neo4jManager.getResultFromDB(query, params, output_values=['recentlyPlayed'])
+    return result['recentlyPlayed']
 
 # function will create a pandas dataset that has 4 times of day (Morning, Afternoon, Evening, and Night), 
 # each day will show the number of listens over a 90 day period for each period of the day
 @st.cache_data
 def getTimeOfDay(node_type, user_uid):
     data = {
-        'Time': ["Morning","Afternoon","Evening","Night"],
+        'Time': ['Morning","Afternoon","Evening","Night'],
         'Listens':[]
     }
 
@@ -697,13 +697,13 @@ def getTimeOfDay(node_type, user_uid):
     for i in timesOfDay.keys():
         query = f"""
             MATCH (n:{node_type})
-            WITH n, [value IN n.hour_of_day WHERE {timesOfDay[i][0]} <= value <= {timesOfDay[i][1]} AND n.user_uid = "{user_uid}"] AS matchingValues
+            WITH n, [value IN n.hour_of_day WHERE {timesOfDay[i][0]} <= value <= {timesOfDay[i][1]} AND n.user_uid = "{user_uid}'] AS matchingValues
             RETURN sum(size(matchingValues)) AS totalCount
         """
 
-        result = neo4jManager.getResultFromDB(query, params={},output_values=["totalCount"])
+        result = neo4jManager.getResultFromDB(query, params={},output_values=['totalCount'])
 
-        data['Listens'].append(result["totalCount"][0])
+        data['Listens'].append(result['totalCount'][0])
     
     df = pd.DataFrame(data)
 
@@ -727,10 +727,10 @@ def getFavDetails(name, node_type, user_uid):
         RETURN n.image_url AS image_url, n.id AS id
         """
 
-    result = neo4jManager.getResultFromDB(query=query,params={}, output_values=["image_url","id"])
+    result = neo4jManager.getResultFromDB(query=query,params={}, output_values=['image_url","id'])
 
-    print(f"image_url: {result["image_url"]}")
-    return result["image_url"], result["id"]
+    print(f"image_url: {result['image_url']}")
+    return result['image_url'], result['id']
 
 # function creates a streamlit list of favorite 
 @st.cache_data
@@ -748,9 +748,9 @@ def createFavoritesCol(user_uid, node_type, number_of_entries):
 
     results = getFavorites(user_uid=user_uid, node_type=node_type,number_of_entries=number_of_entries)
                 
-    for i in range(len(results["name"])):
+    for i in range(len(results['name'])):
         
-        image_url, id = getFavDetails(user_uid=user_uid, name=results["name"][i],node_type=node_type)
+        image_url, id = getFavDetails(user_uid=user_uid, name=results['name'][i],node_type=node_type)
         
         col4,col5, col6 = st.columns([1,3, 1])
         
@@ -782,12 +782,12 @@ def createFavoritesCol(user_uid, node_type, number_of_entries):
 
             # Create clickable text using HTML
             st.markdown(
-                f'<a href="{link}" target="_blank">{results["name"][i]}</a>',
+                f'<a href="{link}" target="_blank">{results['name'][i]}</a>',
                 unsafe_allow_html=True
             )
         
         with col6:
-            st.write(results["listens"][i])
+            st.write(results['listens'][i])
 
     st.write("---")  # Separator between tracks
 
@@ -798,7 +798,7 @@ def makeGenrePieChart(favoriteGenres):
     fig, ax = plt.subplots()
 
     colors = ['#2eb82e', '#e6005c', '#e65c00', '#5500ff','#0000e6']
-    ax.pie(favoriteGenres["listens"], labels=favoriteGenres["name"], colors = colors, autopct='%1.1f%%', startangle=90, wedgeprops=dict(width=0.45), pctdistance=0.85, labeldistance=1.05, textprops={'color': 'white'})
+    ax.pie(favoriteGenres['listens'], labels=favoriteGenres['name'], colors = colors, autopct='%1.1f%%', startangle=90, wedgeprops=dict(width=0.45), pctdistance=0.85, labeldistance=1.05, textprops={'color': 'white'})
 
     ax.axis('equal')
 
@@ -938,7 +938,7 @@ def main():
                     
                     print(st.session_state['user_email'])
                     # Generate auth url to be used
-                    result = run_query({"email":st.session_state['user_email']}, "find", st.secrets["user_database"]["database_name"], st.secrets["user_database"]["collection_name"], projection={'state':1, '_id':0})
+                    result = run_query({"email":st.session_state['user_email']}, "find", st.secrets['user_database']['database_name'], st.secrets['user_database']['collection_name'], projection={'state':1, '_id':0})
                     auth_url,code_verifier = apiHelper.getAuthCodeURL(result['state'])
                 
                     params = {
@@ -949,7 +949,7 @@ def main():
                     print(f"params for auth (state): {result}")
 
                     # stores state and code_verifier in user db before navigating user to spotify API auth page
-                    result = run_query({"user_uid":st.session_state['user_uid']},"update", st.secrets["user_database"]["database_name"], st.secrets["user_database"]["collection_name"], update={"state": result['state'], "code_verifier":code_verifier})
+                    result = run_query({"user_uid":st.session_state['user_uid']},"update", st.secrets['user_database']['database_name'], st.secrets['user_database']['collection_name'], update={"state": result['state'], "code_verifier":code_verifier})
 
                     # create a new session, using the state generated as a "session_id" will be used to track sessions because streamlit resets cache
                     # when a redirect occurs
@@ -1032,7 +1032,7 @@ def main():
                 # if spotify_email is not pulled, then pull the info with the API, store it in cache, and put extra info in MongoDB
                 #if 'spotify_email' not in st.session_state:
                     #results = apiManager.getAPIResponse(type="user")
-                    #st.session_state['spotify_email'] = results["email"]
+                    #st.session_state['spotify_email'] = results['email']
                     #store_spotify_user(results)
 
                 st.write(f"Logged In As {st.session_state['email']}")
@@ -1047,7 +1047,7 @@ def main():
 
         #get uid of user if not pulled, then pull any recent songs from Spotify and put into DB 
         if "user_uid" not in st.session_state:
-            result = get_user_uid(st.session_state["user_email"])
+            result = get_user_uid(st.session_state['user_email'])
             print(f"result of user_uid: {result}")
             if result is None:
                 st.error(f"Error: {st.session_state['email']} is not a valid email. Please sign up or try retyping email")
@@ -1057,7 +1057,7 @@ def main():
                 st.session_state['user_uid'] = result
   
         my_bar = st.progress(0, text = "Loading Tracks... Please Wait")
-        expired = API2DB(utc_timestamp = utc_timestamp, user_uid = st.session_state["user_uid"], my_bar=my_bar)
+        expired = API2DB(utc_timestamp = utc_timestamp, user_uid = st.session_state['user_uid'], my_bar=my_bar)
         my_bar.empty()
 
         with st.container():
@@ -1065,22 +1065,22 @@ def main():
 
             with col1:
                 st.markdown(f"<h2 style='text-align: left; color: white;'>Genre Breakout</h2>", unsafe_allow_html=True)
-                makeGenrePieChart(getFavorites(user_uid=st.session_state["user_uid"], node_type="Genre", number_of_entries=10))
+                makeGenrePieChart(getFavorites(user_uid=st.session_state['user_uid'], node_type="Genre", number_of_entries=10))
             
             with col3:
                 st.markdown(f"<h2 style='text-align: left; color: white;'>Metrics</h2>", unsafe_allow_html=True)
 
-                makeTooltip(text_next_to_icon=f"Obscurity Score: {calculateObscurityScore(user_uid=st.session_state["user_uid"])}%",tooltip_text="Your Obscurity Score Ranges From 0 to 100, and Quantifies How Obscure The Music You Listen to is")
+                makeTooltip(text_next_to_icon=f"Obscurity Score: {calculateObscurityScore(user_uid=st.session_state['user_uid'])}%",tooltip_text="Your Obscurity Score Ranges From 0 to 100, and Quantifies How Obscure The Music You Listen to is")
 
-                makeTooltip(text_next_to_icon=f"Diversity Score: {calculateDiversityScore(user_uid=st.session_state["user_uid"],)}%",tooltip_text="Your Diversity Score Ranges From 0 to 100, and Quantifies How Much Variety of Music You Listen to")
+                makeTooltip(text_next_to_icon=f"Diversity Score: {calculateDiversityScore(user_uid=st.session_state['user_uid'],)}%",tooltip_text="Your Diversity Score Ranges From 0 to 100, and Quantifies How Much Variety of Music You Listen to")
 
-                makeTooltip(text_next_to_icon=f"Recency Engagement Score: {getRecencyEngagementScore(current_timestamp=utc_timestamp, user_uid=st.session_state["user_uid"])}%",tooltip_text="Recency Engagement Score Ranges From 0 to 100, and Quantifies the Ratio of Tracks You've Listened to Recently vs. All The Tracks You've Listened")
+                makeTooltip(text_next_to_icon=f"Recency Engagement Score: {getRecencyEngagementScore(current_timestamp=utc_timestamp, user_uid=st.session_state['user_uid'])}%",tooltip_text="Recency Engagement Score Ranges From 0 to 100, and Quantifies the Ratio of Tracks You've Listened to Recently vs. All The Tracks You've Listened")
 
-                makeTooltip(text_next_to_icon=f"Total Tracks Listened To: {getTotalNodes(user_uid=st.session_state["user_uid"], node_type="Track")}",tooltip_text="Total Tracks You've Listened To")
+                makeTooltip(text_next_to_icon=f"Total Tracks Listened To: {getTotalNodes(user_uid=st.session_state['user_uid'], node_type="Track")}",tooltip_text="Total Tracks You've Listened To")
 
-                makeTooltip(text_next_to_icon=f"Total Albums Listened To: {getTotalNodes(user_uid=st.session_state["user_uid"], node_type="Album")}",tooltip_text="Total Albums You've Listened To")
+                makeTooltip(text_next_to_icon=f"Total Albums Listened To: {getTotalNodes(user_uid=st.session_state['user_uid'], node_type="Album")}",tooltip_text="Total Albums You've Listened To")
 
-                makeTooltip(text_next_to_icon=f"Total Genres Listened To: {getTotalNodes(user_uid=st.session_state["user_uid"], node_type="Genre")}",tooltip_text="Total Genres You've Listened To")
+                makeTooltip(text_next_to_icon=f"Total Genres Listened To: {getTotalNodes(user_uid=st.session_state['user_uid'], node_type="Genre")}",tooltip_text="Total Genres You've Listened To")
 
 
         #if refresh token is expired, then rerun page
@@ -1094,7 +1094,7 @@ def main():
                 # add title
                 st.markdown(f"<h2 style='text-align: left; color: white;'>Listens Based on Time of Day</h2>", unsafe_allow_html=True)
 
-                df = getTimeOfDay(user_uid=st.session_state["user_uid"], node_type="Track")
+                df = getTimeOfDay(user_uid=st.session_state['user_uid'], node_type="Track")
 
                 # Create the Altair chart
                 chart = alt.Chart(df).mark_bar(color='green').encode(
@@ -1158,7 +1158,7 @@ def main():
                                 end_date = st.date_input(label = "End Date", value = today, max_value = "today") 
                                 end_timestamp = convert_to_utc_timestamp(end_date)
 
-                result = getListensOverTime(user_uid=st.session_state["user_uid"], start_time=start_timestamp, end_time=end_timestamp, measure_type=measure_type,granularity=granularity)
+                result = getListensOverTime(user_uid=st.session_state['user_uid'], start_time=start_timestamp, end_time=end_timestamp, measure_type=measure_type,granularity=granularity)
 
                 # Create an Altair chart with the specified features
                 chart = alt.Chart(result).mark_line(color='green').encode(
@@ -1198,16 +1198,16 @@ def main():
             col1,col2,col3,col4 = st.columns([1,1,1,1])
 
             with col1:  
-                createFavoritesCol(user_uid=st.session_state["user_uid"], node_type="Track", number_of_entries=5)
+                createFavoritesCol(user_uid=st.session_state['user_uid'], node_type="Track", number_of_entries=5)
 
             with col2:  
-                createFavoritesCol(user_uid=st.session_state["user_uid"], node_type="Artist", number_of_entries=5)   
+                createFavoritesCol(user_uid=st.session_state['user_uid'], node_type="Artist", number_of_entries=5)   
 
             with col3:  
-                createFavoritesCol(user_uid=st.session_state["user_uid"], node_type="Album", number_of_entries=5)
+                createFavoritesCol(user_uid=st.session_state['user_uid'], node_type="Album", number_of_entries=5)
 
             with col4:  
-                createFavoritesCol(user_uid=st.session_state["user_uid"], node_type="Playlist", number_of_entries=5) 
+                createFavoritesCol(user_uid=st.session_state['user_uid'], node_type="Playlist", number_of_entries=5) 
 
         st.markdown("<h2 style='text-align: left; font-size:40px; color: white;'>Neo4j Database</h2>", unsafe_allow_html=True) 
         query = st.text_input("Database Query", value="MATCH (n)-[r]->(m) RETURN n, r, m")
@@ -1251,7 +1251,7 @@ def main():
 
                         st.session_state['user_uid'] = get_user_uid(st.session_state['user_email'])
 
-                        result = run_query({"user_uuid": st.session_state['user_uid']}, "update", st.secrets["user_database"]["database_name"], st.secrets["user_database"]["collection_name"],update={"last_login":current_utc_time})
+                        result = run_query({"user_uuid": st.session_state['user_uid']}, "update", st.secrets['user_database']['database_name'], st.secrets['user_database']['collection_name'],update={"last_login":current_utc_time})
 
 
                         # calculate state variable used in API auth
@@ -1269,7 +1269,7 @@ def main():
 
                 if 'error_message' in st.session_state:
                     st.error(st.session_state.error_message)
-                    del st.session_state["error_message"]
+                    del st.session_state['error_message']
             
                     
     # if page state is 3, show sign up form
@@ -1295,15 +1295,15 @@ def main():
 
                 if 'error_message' in st.session_state:
                     st.error(st.session_state.error_message)
-                    del st.session_state["error_message"]
+                    del st.session_state['error_message']
 
                 if st.button("Sign Up"):
                     result = create_new_user(email=email, first_name=first_name, last_name=last_name, password=password, current_timestamp=utc_timestamp)
-                    st.session_state["user_email"] = email
+                    st.session_state['user_email'] = email
 
                     if result:
                         st.session_state['success_message'] = "Login Successfully Created"
-                        st.session_state["user_email"] = email
+                        st.session_state['user_email'] = email
                         st.session_state['page_state'] = 2
                          # Prepare the email message
                         msg = MIMEText(f"New User Was Created: {st.session_state['user_email']}")
@@ -1317,7 +1317,7 @@ def main():
                             server.login("api", st.secrets['mailtrap']['api_token'])
                             server.sendmail(sender, receiver, msg.as_string())
                     else:
-                        st.session_state["error_message"] = "Error: User Already Exists. Please Enter a Different Email"
+                        st.session_state['error_message'] = "Error: User Already Exists. Please Enter a Different Email"
                         st.session_state['success_message'] = ""
                         st.session_state['page_state'] = 3
                     
@@ -1330,7 +1330,7 @@ def main():
                     st.rerun()
 
     else:
-        st.write(st.session_state["error_message"])
+        st.write(st.session_state['error_message'])
     
     return 0
     

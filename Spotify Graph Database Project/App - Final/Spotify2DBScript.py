@@ -61,7 +61,7 @@ class apiHelper():
         # Build the authorization URL with PKCE and state variable
         params = {
             'response_type': 'code',
-            'client_id': st.secrets["spotify_api"]["client_id"],
+            'client_id': st.secrets['spotify_api']['client_id'],
             'state': state,
             'scope': SCOPE,
             'code_challenge_method': 'S256',
@@ -79,7 +79,7 @@ class apiHelper():
             token_data = {
                 'grant_type': 'refresh_token',
                 'refresh_token': refresh_token,
-                'client_id': st.secrets["spotify_api"]["client_id"]
+                'client_id': st.secrets['spotify_api']['client_id']
             }
         #use the refresh token to fetch a new access token if provided
         elif auth_code is not None:
@@ -87,7 +87,7 @@ class apiHelper():
                 'grant_type': 'authorization_code',
                 'code': auth_code,
                 'redirect_uri': REDIRECT_URI,
-                'client_id': st.secrets["spotify_api"]["client_id"],
+                'client_id': st.secrets['spotify_api']['client_id'],
                 'code_verifier': code_verifier  # Important: Use the original code verifier
             }
         else:
@@ -259,9 +259,9 @@ class Neo4jHelper:
         if neo4j_result is not None:
             print("Query succeeded:", neo4j_result)
 
-            if neo4j_result["deleted_count"][0] > 0:
+            if neo4j_result['deleted_count'][0] > 0:
                 print("User successfully deleted")
-                return neo4j_result["deleted_count"][0]
+                return neo4j_result['deleted_count'][0]
             else:
                 print("Error: user was not successfully deleted")
                 return False
@@ -300,11 +300,11 @@ class Neo4jHelper:
             RETURN n.refresh_token_expired AS refreshTokenExpired
         """
         
-        result = self.getResultFromDB(query,params = {},output_values=["refreshTokenExpired"])
+        result = self.getResultFromDB(query,params = {},output_values=['refreshTokenExpired'])
 
         if result is not None:
             print("Query succeeded:", result)
-            return result["refreshTokenExpired"][0]
+            return result['refreshTokenExpired'][0]
 
         else:
             print("neo4j query failed")
@@ -320,7 +320,7 @@ class Neo4jHelper:
             RETURN n AS output
         """
 
-        result = self.getResultFromDB(query,params = {"value":value},output_values=["output"])
+        result = self.getResultFromDB(query,params = {"value":value},output_values=['output'])
         
         if result is not None:
             return True
@@ -377,9 +377,9 @@ class Neo4jHelper:
             case _:
                 print(f"Error: unrecognized type: {type}")
                 return
-        result = self.getResultFromDB(query=query,params={"id":id},output_values=["exists"])
+        result = self.getResultFromDB(query=query,params={"id":id},output_values=['exists'])
 
-        return result["exists"][0]
+        return result['exists'][0]
         
     # function is used to determine whether we have a valid refresh token. Function will also reauthorize the API if the variable authAPI is set to True (done by default)
     # if the refresh token exists in the DB, then we will assume it is valid. Error handling in App.py will deal with exception of an expired refresh token
@@ -447,11 +447,11 @@ class Neo4jHelper:
         RETURN n.refresh_token AS refresh_token
         """
 
-        result = self.getResultFromDB(query=query,params={},output_values=["refresh_token"])
-        if not result["refresh_token"]:
+        result = self.getResultFromDB(query=query,params={},output_values=['refresh_token'])
+        if not result['refresh_token']:
             return ""
         else:
-            return result["refresh_token"][0]
+            return result['refresh_token'][0]
     
     # gets the Last Sync Timestamp from the Database
     def getTimestamp(self):
@@ -461,11 +461,11 @@ class Neo4jHelper:
         RETURN n.last_sync_timestamp AS last_sync_timestamp
         """
 
-        timestamp = self.getResultFromDB(query=query,params={},output_values=["last_sync_timestamp"])
+        timestamp = self.getResultFromDB(query=query,params={},output_values=['last_sync_timestamp'])
         
-        print(f"Timestamp from DB: {timestamp["last_sync_timestamp"][0]}")
-        logging.info(f"Timestamp from DB: {timestamp["last_sync_timestamp"][0]}")
-        return timestamp["last_sync_timestamp"][0]
+        print(f"Timestamp from DB: {timestamp['last_sync_timestamp'][0]}")
+        logging.info(f"Timestamp from DB: {timestamp['last_sync_timestamp'][0]}")
+        return timestamp['last_sync_timestamp'][0]
     
     # stores Last Sync Timestamp in Database
     def storeTimestamp(self,timestamp):
@@ -484,14 +484,14 @@ class Neo4jHelper:
             RETURN n.play_history AS play_history
         """
 
-        result = self.getResultFromDB(query=query,params={"id":id, "id_type":id_type},output_values=["play_history"])
+        result = self.getResultFromDB(query=query,params={"id":id, "id_type":id_type},output_values=['play_history'])
         
         if result is not None:
-            return result["play_history"][0]
+            return result['play_history'][0]
         else:    
             return False
 
-        return result["play_history"][0]
+        return result['play_history'][0]
 
     def getHourOfDay(self,id,id_type):
         query = f"""
@@ -500,8 +500,8 @@ class Neo4jHelper:
             RETURN n.hour_of_day AS timeOfDay
         """
 
-        result = self.getResultFromDB(query=query,params={"id":id, "id_type":id_type},output_values=["timeOfDay"])
-        return result["timeOfDay"][0]
+        result = self.getResultFromDB(query=query,params={"id":id, "id_type":id_type},output_values=['timeOfDay'])
+        return result['timeOfDay'][0]
 
     def makePath(self, pathType, node_id_a, node_id_b, node_type_a, node_type_b):
         query = f"""
@@ -600,7 +600,7 @@ class Neo4jHelper:
         if result is not None:
             
             if(type != "config"):
-                logging.info(f"Created {type} node for {type} named {params["name"]} with id {params["id"]}")
+                logging.info(f"Created {type} node for {type} named {params['name']} with id {params['id']}")
             else:
                 logging.info(f"config node successfully created")
             return True
@@ -621,11 +621,11 @@ class Neo4jHelper:
             RETURN EXISTS((a)-[:{path_name}*1..2]-(b)) AS pathExists
         """
 
-        result = self.getResultFromDB(query=query,params={},output_values=["pathExists"])
+        result = self.getResultFromDB(query=query,params={},output_values=['pathExists'])
 
         if result is not None:
             if result['pathExists']:
-                return result["pathExists"][0]
+                return result['pathExists'][0]
             else:
                 return False
         else:
@@ -658,7 +658,7 @@ class Neo4jHelper:
                 result = self.runQuery(query)
 
                 if result is not None:
-                    return result["output"][0]
+                    return result['output'][0]
                 else:
                     print("Query failed but program is continuing.")       
                     return False
@@ -781,7 +781,7 @@ def convertJSON(api_json, type):
                 artists = []
 
                 # Populate artists array to contain id and url of each returned artist
-                for artist in track["track"]["artists"]:
+                for artist in track['track']['artists']:
                     artists.append({
                         "id": artist.get("id", ""),
                         "url": artist.get("href", "")
@@ -792,22 +792,22 @@ def convertJSON(api_json, type):
                     context_url = ""
                     id = ""
                 else:
-                    context_type = track["context"].get("type","")
-                    context_url = track["context"].get("href","")
+                    context_type = track['context'].get("type","")
+                    context_url = track['context'].get("href","")
 
                     # id is not returned in API response. Below extracts ID from URL
                     id = context_url.split("/")[-1]
             
-                results[track["track"].get("id", "")] = createTrackDict(
-                    name = track["track"].get("name",""),
-                    popularity=track["track"].get("popularity", 0),
+                results[track['track'].get("id", "")] = createTrackDict(
+                    name = track['track'].get("name",""),
+                    popularity=track['track'].get("popularity", 0),
                     played_at=track.get("played_at", ""),
                     context_type = context_type,
                     context_url = context_url,
                     context_id = id,
-                    preview_url=track["track"].get("preview_url", ""),
-                    album_url=track["track"]["album"].get("href", ""),
-                    album_id=track["track"]["album"].get("id", ""),
+                    preview_url=track['track'].get("preview_url", ""),
+                    album_url=track['track']['album'].get("href", ""),
+                    album_id=track['track']['album'].get("id", ""),
                     artists = artists
                 )
         
@@ -846,7 +846,7 @@ def convertJSON(api_json, type):
                 image_url = ""  # or some default value
 
             # use function to create new object
-            results[api_json["id"]] = createArtistDict(
+            results[api_json['id']] = createArtistDict(
                 name=api_json.get("name", "Unknown"),
                 popularity=api_json.get("popularity", 0),
                 genres=api_json.get("genres", []),
@@ -860,7 +860,7 @@ def convertJSON(api_json, type):
             # pull all tracks and store their IDs in an array
             for track in api_json.get("tracks", {}).get("items", []):
                 if track.get("track"):
-                    tracks.append(track["track"].get("id", ""))
+                    tracks.append(track['track'].get("id", ""))
 
             # use function to create new object
             results = createPlaylistDict(
@@ -977,15 +977,15 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
 
     # ETL code. Extracts API info, converts it into objects that are then loaded to Graph Database
     for track in list(recently_played_tracks.keys()):
-        played_at_timestamp, hour = convertTimestamp(recently_played_tracks[track]["played_at"])
+        played_at_timestamp, hour = convertTimestamp(recently_played_tracks[track]['played_at'])
 
         # if the song's played at time is older than the last seen play time, then skip it
         # used to ensure there is no overlap between syncs
         if(last_sync_timestamp < played_at_timestamp):
-            print(f"name of current track: {recently_played_tracks[track]["name"]}")
+            print(f"name of current track: {recently_played_tracks[track]['name']}")
             print(f"track play time: {played_at_timestamp}")
 
-            logging.info(f"name of current track: {recently_played_tracks[track]["name"]}")
+            logging.info(f"name of current track: {recently_played_tracks[track]['name']}")
             logging.info(f"track play time: {played_at_timestamp}")
 
             #if the track already exists in DB, then overwrite its popularity, last played, preview_url, and iterate times played
@@ -999,8 +999,8 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
                 play_history.append(played_at_timestamp)
                 hour_of_day.append(hour)
 
-                popularity = recently_played_tracks[track]["popularity"]
-                preview_url = recently_played_tracks[track]["preview_url"]
+                popularity = recently_played_tracks[track]['popularity']
+                preview_url = recently_played_tracks[track]['preview_url']
 
                 query = f"""
                     MATCH (n:Track {{id: "{track}"}})
@@ -1020,18 +1020,18 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
                 # if the track doesn't exist, create a new node
                 params = {
                     "user_uid": user_uid,
-                    "name": recently_played_tracks[track]["name"],
+                    "name": recently_played_tracks[track]['name'],
                     "id": track,
                     "play_history": [played_at_timestamp],
                     "hour_of_day":[hour],
-                    "popularity": recently_played_tracks[track]["popularity"],
-                    "preview_url": recently_played_tracks[track]["preview_url"],
+                    "popularity": recently_played_tracks[track]['popularity'],
+                    "preview_url": recently_played_tracks[track]['preview_url'],
                 }
 
                 neo4jManager.createNode(params=params,type="track")
 
             # pull album info
-            album_results = apiManager.getAPIResponse("album",url=recently_played_tracks[track]["album"]["url"])
+            album_results = apiManager.getAPIResponse("album",url=recently_played_tracks[track]['album']['url'])
 
             # if an error is returned when making call.. skip storing in DB
             if(album_results == 0):
@@ -1039,7 +1039,7 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
             else:
                 album_results = convertJSON(album_results,"album")
 
-                album_id = recently_played_tracks[track]["album"]["id"]
+                album_id = recently_played_tracks[track]['album']['id']
                 logging.info(f"making API Call to Pull Data For Album With ID {album_id}")
 
                 # if album exists, update params
@@ -1053,9 +1053,9 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
                     play_history.append(played_at_timestamp)
                     hour_of_day.append(hour)
 
-                    image_url = album_results["image_url"]
-                    label = album_results["label"]
-                    popularity = album_results["popularity"]
+                    image_url = album_results['image_url']
+                    label = album_results['label']
+                    popularity = album_results['popularity']
 
                     query = f"""
                         MATCH (n:Album {{id: "{album_id}"}})
@@ -1074,13 +1074,13 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
                 else:
                     params = {
                         "user_uid": user_uid,
-                        "name": album_results["name"],
+                        "name": album_results['name'],
                         "id": album_id,
-                        "image_url": album_results["image_url"],
-                        "label": album_results["label"],
+                        "image_url": album_results['image_url'],
+                        "label": album_results['label'],
                         "play_history": [played_at_timestamp],
                         "hour_of_day": [hour],
-                        "popularity": album_results["popularity"],
+                        "popularity": album_results['popularity'],
                     }
 
                     # Create new node and connect track to album in DB
@@ -1091,18 +1091,18 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
                     neo4jManager.makePath("IN_ALBUM",track,album_id,"Track","Album")
 
                 # create/update Genre Node based on genres associated with album
-                neo4jManager.updateGenres(node_id=album_id,genres=album_results["genres"],node_type="genre",timestamp=played_at_timestamp,hour=hour)
+                neo4jManager.updateGenres(node_id=album_id,genres=album_results['genres'],node_type="genre",timestamp=played_at_timestamp,hour=hour)
                     
 
             # iterate through all artists
-            for artist in recently_played_tracks[track]["artists"]:
+            for artist in recently_played_tracks[track]['artists']:
                 
                 # pull id of artist
-                artist_id = artist["id"]
+                artist_id = artist['id']
                 logging.info(f"making API Call to Pull Data For Artist With ID {artist_id}")
 
                 # Make API Call to pull artist info and convert to stripped down JSON object
-                artist_results = apiManager.getAPIResponse("artist",url=artist["url"])
+                artist_results = apiManager.getAPIResponse("artist",url=artist['url'])
 
                 # if an error is returned when making call.. skip storing in DB
                 if(artist_results == 0):
@@ -1122,9 +1122,9 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
                         play_history.append(played_at_timestamp)
                         hour_of_day.append(hour)
 
-                        popularity = artist_results[artist_id]["popularity"]
-                        image_url = artist_results[artist_id]["image_url"]
-                        num_followers =  artist_results[artist_id]["num_followers"]
+                        popularity = artist_results[artist_id]['popularity']
+                        image_url = artist_results[artist_id]['image_url']
+                        num_followers =  artist_results[artist_id]['num_followers']
                         
                         # Update artist fields
                         query = f"""
@@ -1145,11 +1145,11 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
 
                         params = {
                             "user_uid": user_uid,
-                            "name":artist_results[artist_id]["name"],
-                            "popularity": artist_results[artist_id]["popularity"],
+                            "name":artist_results[artist_id]['name'],
+                            "popularity": artist_results[artist_id]['popularity'],
                             "id": artist_id,
-                            "image_url": artist_results[artist_id]["image_url"],
-                            "num_followers": artist_results[artist_id]["num_followers"],
+                            "image_url": artist_results[artist_id]['image_url'],
+                            "num_followers": artist_results[artist_id]['num_followers'],
                             "play_history": [played_at_timestamp],
                             "hour_of_day": [hour]
                         }
@@ -1166,19 +1166,19 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
                         neo4jManager.makePath("MADE_BY",album_id,artist_id,"Album","Artist")
 
                     # update the genres associated with artist
-                    neo4jManager.updateGenres(node_id = artist_id,genres = artist_results[artist_id]["genres"],node_type="Artist",timestamp=played_at_timestamp,hour=hour)
+                    neo4jManager.updateGenres(node_id = artist_id,genres = artist_results[artist_id]['genres'],node_type="Artist",timestamp=played_at_timestamp,hour=hour)
             
             
             # if the person played a track through a playlist, add/modify playlist in DB
-            if(recently_played_tracks[track]["context"]["type"] == "playlist"):
+            if(recently_played_tracks[track]['context']['type'] == "playlist"):
                 
                 # pull id of playlist
-                playlist_id = recently_played_tracks[track]["context"]["id"]
+                playlist_id = recently_played_tracks[track]['context']['id']
 
                 logging.info(f"making API Call to Pull Data For Playlist With ID {playlist_id}")
 
                 # make API call to get additional info about playlist
-                playlist_results = apiManager.getAPIResponse("playlist",url=recently_played_tracks[track]["context"]["url"])
+                playlist_results = apiManager.getAPIResponse("playlist",url=recently_played_tracks[track]['context']['url'])
 
                 if(playlist_results == 0):
                     logging.error(f"Received an Error When Making API Call.. Skipping The entry for {playlist_id}")
@@ -1195,9 +1195,9 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
                         play_history.append(played_at_timestamp)
                         hour_of_day.append(hour)
 
-                        num_followers = playlist_results["num_followers"]
-                        description = playlist_results["description"]
-                        image_url = playlist_results["image_url"]
+                        num_followers = playlist_results['num_followers']
+                        description = playlist_results['description']
+                        image_url = playlist_results['image_url']
 
                         query = f"""
                             MATCH (n:Playlist {{id: "{playlist_id}"}})
@@ -1218,11 +1218,11 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
                     else:
                         params={
                             "user_uid": user_uid,
-                            "name": playlist_results["name"],
-                            "description": playlist_results["description"],
-                            "num_followers": playlist_results["num_followers"],
-                            "image_url": playlist_results["image_url"],
-                            "owner_name": playlist_results["owner"]["name"],
+                            "name": playlist_results['name'],
+                            "description": playlist_results['description'],
+                            "num_followers": playlist_results['num_followers'],
+                            "image_url": playlist_results['image_url'],
+                            "owner_name": playlist_results['owner']['name'],
                             "id": playlist_id,
                             "play_history": [played_at_timestamp],
                             "hour_of_day": [hour]
@@ -1256,7 +1256,7 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
 def main():
 
     # pull all users from DB. Will then iterate through all, and if refresh token exists, update the db for that user
-    client = MongoClient(f"""mongodb://{st.secrets["user_database"]["username"]}:{st.secrets["user_database"]["password"]}@localhost:27017/userDB""")
+    client = MongoClient(f"""mongodb://{st.secrets['user_database']['username']}:{st.secrets['user_database']['password']}@localhost:27017/userDB""")
     db = client['userDB']
     collection = db['listings']
 
