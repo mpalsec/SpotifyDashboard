@@ -782,7 +782,7 @@ def createFavoritesCol(user_uid, node_type, number_of_entries):
 
             # Create clickable text using HTML
             st.markdown(
-                f'<a href="{link}" target="_blank">{results['name'][i]}</a>',
+                f"<a href='{link}' target='_blank'>{results['name'][i]}</a>",
                 unsafe_allow_html=True
             )
         
