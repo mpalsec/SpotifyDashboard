@@ -1,6 +1,6 @@
 import requests
 import pkce
-from urllib.parse import urlencode
+from urllib.parse import urlencode,quote_plus
 from http.server import HTTPServer
 import json
 from datetime import datetime, timezone
@@ -1256,7 +1256,7 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
 def main():
 
     # pull all users from DB. Will then iterate through all, and if refresh token exists, update the db for that user
-    client = MongoClient(f"""mongodb://{st.secrets['user_database']['username']}:{st.secrets['user_database']['password']}@localhost:27017/userDB""")
+    client = MongoClient(f"""mongodb://{st.secrets['user_database']['username']}:{quote_plus(f"{st.secrets['user_database']['password']}")}@localhost:27017/userDB""")
     db = client['userDB']
     collection = db['listings']
 

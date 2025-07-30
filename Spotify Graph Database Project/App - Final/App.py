@@ -1,4 +1,3 @@
-import neo4j
 import streamlit as st
 import pandas as pd
 from neo4j import GraphDatabase, exceptions
@@ -11,6 +10,7 @@ import matplotlib.pyplot as plt
 import altair as alt
 import bcrypt
 from pymongo import MongoClient
+from urllib.parse import quote_plus
 import string
 import uuid
 import secrets
@@ -90,7 +90,10 @@ def mailtrap_error_handler(main_func):
 # projection is used in conjunction with the "find" or "find_one" queries, and is a dictionary that outlines which fields should be returned from the document
 @mailtrap_error_handler
 def run_query(query, query_type, database_name, collection_name, update={}, projection={}):
-    client = MongoClient(f"""mongodb://{st.secrets['user_database']['username']}:{st.secrets['user_database']['password']}@localhost:27017/userDB""")
+    client_string = f"""{st.secrets['user_database']['username']}:{quote_plus(f"{st.secrets['user_database']['password']}")}@localhost:27017/userDB"""
+    print(f"client string: {client_string}")
+    
+    client = MongoClient(f"""mongodb://{st.secrets['user_database']['username']}:{quote_plus(f"{st.secrets['user_database']['password']}")}@localhost:27017/userDB""")
     db = client[database_name]
     collection = db[collection_name]
 
@@ -126,7 +129,10 @@ def run_query(query, query_type, database_name, collection_name, update={}, proj
         return {}
     
     client.close()
-    return result[0]
+    if result[0] is not None:
+        return result[0]
+    else:
+        return 0
     
 
 # checks to see if password provided matches the hash in database
