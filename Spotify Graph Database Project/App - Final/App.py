@@ -90,10 +90,10 @@ def mailtrap_error_handler(main_func):
 # projection is used in conjunction with the "find" or "find_one" queries, and is a dictionary that outlines which fields should be returned from the document
 @mailtrap_error_handler
 def run_query(query, query_type, database_name, collection_name, update={}, projection={}):
-    client_string = f"""{st.secrets['user_database']['username']}:{quote_plus(f"{st.secrets['user_database']['password']}")}@localhost:27017/userDB"""
+    client_string = f"""{st.secrets['user_database']['username']}:{quote_plus(f"{st.secrets['user_database']['password']}")}@localhost:27017/{st.secrets['user_database']['database_name']}"""
     print(f"client string: {client_string}")
     
-    client = MongoClient(f"""mongodb://{st.secrets['user_database']['username']}:{quote_plus(f"{st.secrets['user_database']['password']}")}@localhost:27017/userDB""")
+    client = MongoClient(f"""mongodb://{st.secrets['user_database']['username']}:{quote_plus(f"{st.secrets['user_database']['password']}")}@localhost:27017/{st.secrets['user_database']['database_name']}""")
     db = client[database_name]
     collection = db[collection_name]
 
