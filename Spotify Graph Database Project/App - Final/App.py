@@ -129,7 +129,8 @@ def run_query(query, query_type, database_name, collection_name, update={}, proj
         return {}
     
     client.close()
-    if result[0] is not None:
+
+    if result:
         return result[0]
     else:
         return 0
@@ -634,7 +635,9 @@ def getFavorites(user_uid, node_type, number_of_entries = 5):
         """
 
         params = {"node_type":node_type, "num_of_entries":number_of_entries}
-        result = neo4jManager.getResultFromDB(query,params,['name","listens'])
+        result = neo4jManager.getResultFromDB(query,params,['name','listens'])
+
+        print(f"Data From getFavorites: {data}")
 
         for i in range(len(result['name'])):
             data['name'].append(result['name'][i])
