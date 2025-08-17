@@ -908,7 +908,7 @@ def mailtrap_error_handler(main_func):
 def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_bar = None):
      # Configure the logger
     logging.basicConfig(
-        filename=LOG_FIEPATH,                               # Log file name
+        filename=LOGGING_FILEPATH,                               # Log file name
         level=logging.DEBUG,                                # Log level
         format='%(asctime)s - %(levelname)s - %(message)s'  # Log format
     )
