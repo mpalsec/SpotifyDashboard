@@ -34,7 +34,7 @@ from email.mime.text import MIMEText
 AUTHORIZATION_URL = 'https://accounts.spotify.com/authorize'                            # URL Used to Pull Authorization Code
 TOKEN_URL = 'https://accounts.spotify.com/api/token'                                    # Token endpoint URL
 CLIENT_ID = '951eba0a5d2e4d3b800d74f24b0cd84c'                                          # Your OAuth2 client ID
-REDIRECT_URI = 'http://localhost:8501'                                         # Redirect URI 
+REDIRECT_URI = 'http://73.168.44.86:8501'                                               # Redirect URI 
 SCOPE = 'playlist-read-private playlist-read-collaborative user-read-recently-played user-read-private user-read-email'   # Scopes requested from the API
 PORT = 8000
 
