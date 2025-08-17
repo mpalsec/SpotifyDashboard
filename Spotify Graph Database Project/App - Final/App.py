@@ -67,12 +67,16 @@ def mailtrap_error_handler(main_func):
         try:
             return main_func(*args, **kwargs)
         except Exception as e:
+            # Gets the name of the function that raised the error
+            function_name = main_func.__name__  
+
+            # Create Error Message
             error_msg = f"Error in main(): {e}\n\nTraceback:\n{traceback.format_exc()}"
             print(error_msg)
             
             # Prepare the email message
             msg = MIMEText(error_msg)
-            msg['Subject'] = "Spotify2DBScript Error"
+            msg['Subject'] = f"Spotify App Error in {function_name}"
             msg['From'] = sender
             msg['To'] = receiver
 
@@ -91,14 +95,12 @@ def mailtrap_error_handler(main_func):
 @mailtrap_error_handler
 def run_query(query, query_type, database_name, collection_name, update={}, projection={}):
     client_string = f"""{st.secrets['user_database']['username']}:{quote_plus(f"{st.secrets['user_database']['password']}")}@localhost:27017/{st.secrets['user_database']['database_name']}"""
-    print(f"client string: {client_string}")
     
     client = MongoClient(f"""mongodb://{st.secrets['user_database']['username']}:{quote_plus(f"{st.secrets['user_database']['password']}")}@localhost:27017/{st.secrets['user_database']['database_name']}""")
     db = client[database_name]
     collection = db[collection_name]
 
     if query_type == "find":
-        print("in find")
         if projection == {}:
             result = list(collection.find(query))
         else:
@@ -109,7 +111,7 @@ def run_query(query, query_type, database_name, collection_name, update={}, proj
         result = collection.delete_many(query)
 
         if result.deleted_count > 0:
-            print("Successfully Deleted!")
+            print("Successfully Deleted User!")
             result = True
         else:
             print("no matching document found to delete")
@@ -175,8 +177,6 @@ def logout_user(user_uid):
 def create_new_user(email, first_name,last_name, password, current_timestamp):
     input_password = password.encode('utf-8')
     user_uid = str(uuid.uuid4())[:18]
-
-    print(f"user_uid: {user_uid}")
 
     # Generate a salt
     salt = bcrypt.gensalt()
@@ -532,8 +532,6 @@ def getListensOverTime(user_uid, start_time,end_time,measure_type,granularity = 
         'Listens':[]
     }
 
-    print("inputted start_time: {start_time}")
-
     time_difference = end_time - start_time
     delta = time_difference / granularity
 
@@ -637,14 +635,11 @@ def getFavorites(user_uid, node_type, number_of_entries = 5):
         params = {"node_type":node_type, "num_of_entries":number_of_entries}
         result = neo4jManager.getResultFromDB(query,params,['name','listens'])
 
-        print(f"Data From getFavorites: {data}")
-
         for i in range(len(result['name'])):
             data['name'].append(result['name'][i])
             data['listens'].append(result['listens'][i])
 
         df = pd.DataFrame(data)    
-        print(f"Dataframe: {df}")
         return df
 
 # calculates the "obscurity score" for a user, which is a percentage that articulates how many unique artists, tracks, and albums they listen to. This is based off the popularity metric.
@@ -721,8 +716,6 @@ def getTimeOfDay(node_type, user_uid):
 @st.cache_data
 def getFavDetails(name, node_type, user_uid):
 
-    print(f"name of {node_type} attempting to get favorites from: {name}")
-
     if(node_type == "Track"):
         query = f"""
         MATCH (n:{node_type} {{name: "{name}"}})-[:IN_ALBUM]->(a:Album)
@@ -738,7 +731,6 @@ def getFavDetails(name, node_type, user_uid):
 
     result = neo4jManager.getResultFromDB(query=query,params={}, output_values=['image_url","id'])
 
-    print(f"image_url: {result['image_url']}")
     return result['image_url'], result['id']
 
 # function creates a streamlit list of favorite 
@@ -840,7 +832,6 @@ def main():
 
     # Convert to a UNIX timestamp
     utc_timestamp = int(current_utc_time.timestamp())
-    print(f"utc_timestamp: {utc_timestamp}")
 
     print("Checking to see if logged in...")
     #print(f"session_state: {st.session_state['page_state']}"
@@ -853,12 +844,9 @@ def main():
     
     # if code and state params are in url, use state to reapply user_uid to maintain session
     if ('code' and 'state' in st.query_params):
-        print(f"state: {st.query_params['state']}")
         result = get_auth_variables(st.query_params['state'])
-        print(f"result of pulling auth info: {result}")
 
         if(result != False):
-            print(f"results: {result}")
 
             # set cache params from info from DB
             st.session_state['user_email'] = result['email']
@@ -944,8 +932,6 @@ def main():
             with col1:
                 if st.button("Login To Spotify"):
                     
-                    
-                    print(st.session_state['user_email'])
                     # Generate auth url to be used
                     result = run_query({"email":st.session_state['user_email']}, "find", st.secrets['user_database']['database_name'], st.secrets['user_database']['collection_name'], projection={'state':1, '_id':0})
                     auth_url,code_verifier = apiHelper.getAuthCodeURL(result['state'])
@@ -954,8 +940,6 @@ def main():
                         'state':result['state'],
                         'code_verifier':code_verifier
                     }
-
-                    print(f"params for auth (state): {result}")
 
                     # stores state and code_verifier in user db before navigating user to spotify API auth page
                     result = run_query({"user_uid":st.session_state['user_uid']},"update", st.secrets['user_database']['database_name'], st.secrets['user_database']['collection_name'], update={"state": result['state'], "code_verifier":code_verifier})
@@ -1004,8 +988,6 @@ def main():
 
                 access_token = ""
                 refresh_token = ""
-                
-                print(f"page_state: {st.session_state['page_state']}")
 
                 st.rerun()
         else:

@@ -45,6 +45,9 @@ GET_RECENTLY_PLAYED_URL = 'https://api.spotify.com/v1/me/player/recently-played'
 sender = "spotify-app@mpalsec.com" 
 receiver = "mpalmail@protonmail.com"
 
+# Logging Variables
+LOGGING_FILEPATH = 'Logs/Spotify2DBPythonScriptLogs.log'
+
 ####################################    Classes    ######################################
 
 #used for making API Commands
@@ -206,7 +209,7 @@ class Neo4jHelper:
                 try:
                     result = driver.execute_query(query, params, result_transformer_= neo4j.Result.to_df)
 
-                    logging.info(f"Neo4j Query Successful. Results returned were: {result}\n\nQuery ran was: {query}")
+                    #logging.info(f"Neo4j Query Successful. Results returned were: {result}\n\nQuery ran was: {query}")
                     return result
 
                 except Neo4jError as e:
@@ -257,7 +260,6 @@ class Neo4jHelper:
         neo4j_result = Neo4jHelper.runQuery(self,query,{'user_uid':user_uid})
 
         if neo4j_result is not None:
-            print("Query succeeded:", neo4j_result)
 
             if neo4j_result['deleted_count'][0] > 0:
                 print("User successfully deleted")
@@ -277,7 +279,6 @@ class Neo4jHelper:
         result = Neo4jManager.runQuery(query=query, params=params)
 
         if result is not None:
-            print("Query succeeded:", result)
             for i in range(len(output_values)):
                 results[output_values[i]] = []
 
@@ -882,12 +883,16 @@ def mailtrap_error_handler(main_func):
         try:
             return main_func(*args, **kwargs)
         except Exception as e:
+            # Gets the name of the function that raised the error
+            function_name = main_func.__name__  
+
+            # Create Error Message
             error_msg = f"Error in main(): {e}\n\nTraceback:\n{traceback.format_exc()}"
             print(error_msg)
             
             # Prepare the email message
             msg = MIMEText(error_msg)
-            msg['Subject'] = "Spotify2DBScript Error"
+            msg['Subject'] = f"Spotify App Error in {function_name}"
             msg['From'] = sender
             msg['To'] = receiver
 
@@ -903,8 +908,8 @@ def mailtrap_error_handler(main_func):
 def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_bar = None):
      # Configure the logger
     logging.basicConfig(
-        filename='Logs/Spotify2DBPythonScriptLogs.log',          # Log file name
-        level=logging.DEBUG,              # Log level
+        filename=LOG_FIEPATH,                               # Log file name
+        level=logging.DEBUG,                                # Log level
         format='%(asctime)s - %(levelname)s - %(message)s'  # Log format
     )
     print("In API2DB Function")
@@ -959,10 +964,7 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
     else:
         recently_played_tracks = convertJSON(recently_played_data,"track")
 
-    with open("Logs/recently_played_tracks.json","w") as json_file:
-        json.dump(recently_played_tracks,json_file,indent=4) 
-
-    logging.info(f"Successfully Pulled Recently Played List. There are {len(recently_played_tracks)}")
+    logging.info(f"Successfully Pulled Recently Played List. There are {len(recently_played_tracks)} tracks in the result")
     
 
     # get the timestamp associated with the last play time for the song most recently played in DB
@@ -982,8 +984,6 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
         # if the song's played at time is older than the last seen play time, then skip it
         # used to ensure there is no overlap between syncs
         if(last_sync_timestamp < played_at_timestamp):
-            print(f"name of current track: {recently_played_tracks[track]['name']}")
-            print(f"track play time: {played_at_timestamp}")
 
             logging.info(f"name of current track: {recently_played_tracks[track]['name']}")
             logging.info(f"track play time: {played_at_timestamp}")
