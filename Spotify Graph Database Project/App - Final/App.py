@@ -701,7 +701,7 @@ def getTimeOfDay(node_type, user_uid):
     for i in timesOfDay.keys():
         query = f"""
             MATCH (n:{node_type})
-            WITH n, [value IN n.hour_of_day WHERE {timesOfDay[i][0]} <= value <= {timesOfDay[i][1]} AND n.user_uid = "{user_uid}'] AS matchingValues
+            WITH n, [value IN n.hour_of_day WHERE {timesOfDay[i][0]} <= value <= {timesOfDay[i][1]} AND n.user_uid = "{user_uid}"] AS matchingValues
             RETURN sum(size(matchingValues)) AS totalCount
         """
 
