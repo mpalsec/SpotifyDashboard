@@ -731,8 +731,6 @@ def getFavDetails(name, node_type, user_uid):
 
     result = neo4jManager.getResultFromDB(query=query,params={}, output_values=['image_url","id'])
 
-    print("test")
-
     return result['image_url'], result['id']
 
 # function creates a streamlit list of favorite 
