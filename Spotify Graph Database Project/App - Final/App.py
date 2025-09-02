@@ -738,6 +738,7 @@ def getFavDetails(name, node_type, user_uid):
 
     result = neo4jManager.getResultFromDB(query=query,params={}, output_values=['image_url','id'])
     print(f"Results From GetFavDetails: {result}")
+    print("testing...")
 
     return result['image_url'], result['id']
 
