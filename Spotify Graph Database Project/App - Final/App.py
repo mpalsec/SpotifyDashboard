@@ -146,7 +146,6 @@ def validate_password(email, password):
         print("Error: email does not exist, please try a different email or sign up for an account")
         return "noUser"
     else:
-        print(f"result: {result}")
         if bcrypt.checkpw(input_password, result['password_hash']):
             print("Passwords Match")
             return "loggedIn"
@@ -713,7 +712,7 @@ def getTimeOfDay(node_type, user_uid):
         """
 
         result = neo4jManager.getResultFromDB(query, params={},output_values=['totalCount'])
-        print(f"Results From GetTimesofDay: {result}")
+        print(f"Results From GetTimesofDay: {result['totalCount'][0]}")
 
         data['Listens'].append(result['totalCount'][0])
     
