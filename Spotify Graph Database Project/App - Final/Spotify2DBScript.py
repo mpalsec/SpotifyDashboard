@@ -258,6 +258,7 @@ class Neo4jHelper:
         """
 
         neo4j_result = Neo4jHelper.runQuery(self,query,{'user_uid':user_uid})
+        print(f"Results From deleteUserNodes: {neo4j_result}")
 
         if neo4j_result is not None:
 
@@ -304,7 +305,7 @@ class Neo4jHelper:
         result = self.getResultFromDB(query,params = {},output_values=['refreshTokenExpired'])
 
         if result is not None:
-            print("Query succeeded:", result)
+            print("Query Succeeded:", result)
             return result['refreshTokenExpired'][0]
 
         else:
@@ -322,12 +323,13 @@ class Neo4jHelper:
         """
 
         result = self.getResultFromDB(query,params = {"value":value},output_values=['output'])
+        print(f"Results From storeRefreshTokenExpired: {result}")
         
         if result is not None:
             return True
 
         else:
-            print("neo4j query failed")
+            print("neo4j query failed while sto")
             return False
 
     # Checks if a node in DB Exists
@@ -1012,7 +1014,7 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
                 result = neo4jManager.runQuery(query)
 
                 if result is not None:
-                    print("Query succeeded")
+                    print(f"Query Succeeded: {result}")
                 else:
                     print("Query failed but program is continuing.")       
                 
@@ -1067,7 +1069,7 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
                     result = neo4jManager.runQuery(query)
 
                     if result is not None:
-                        print("Query succeeded")
+                        print(f"Query Succeeded: {result}")
                     else:
                         print("Query failed but program is continuing.")       
 
@@ -1137,7 +1139,7 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
                         result = neo4jManager.runQuery(query)
 
                         if result is not None:
-                            print("Query succeeded")
+                            print(f"Query Succeeded: {result}")
                         else:
                             print("Query failed")  
 
@@ -1209,7 +1211,7 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
                         result = neo4jManager.runQuery(query)
 
                         if result is not None:
-                            print("Query succeeded")
+                            print(f"Query Succeeded: {result}")
                         else:
                             print("Query failed")  
 

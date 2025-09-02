@@ -353,6 +353,8 @@ def getRecencyEngagementScore(current_timestamp, user_uid):
     result = neo4jManager.getResultFromDB(query, params={"start_time":start_time,"current_timestamp":current_timestamp}, output_values=['totalCount'])
     totalTracks = getNumberTracks(user_uid)
 
+    print(f"result from RecencyEngagementScore: {result}")
+
     return round((result['totalCount'][0]/totalTracks)*100,0)
 
 # function gets the total number of nodes that exist for a specific node_type
@@ -370,6 +372,7 @@ def getTotalNodes(node_type,user_uid):
     }
 
     result = neo4jManager.getResultFromDB(query, params, output_values=['totalCount'])
+    print(f"Results From GetTotalNodes: {result}")
     return result['totalCount'][0]
 
 @st.cache_data
@@ -589,7 +592,8 @@ def getListensOverTime(user_uid, start_time,end_time,measure_type,granularity = 
         elif(measure_type == "Past 7 Days"):
             x = local_datetime.strftime('%A, %b %d')
 
-        result = neo4jManager.getResultFromDB(query, params, ['totalCount'])         
+        result = neo4jManager.getResultFromDB(query, params, ['totalCount'])    
+        print(f"Results From GetListensOverTime: {result}")     
 
         data['Time'].append(x)
         data['Listens'].append(result['totalCount'][0])
@@ -634,6 +638,7 @@ def getFavorites(user_uid, node_type, number_of_entries = 5):
 
         params = {"node_type":node_type, "num_of_entries":number_of_entries}
         result = neo4jManager.getResultFromDB(query,params,['name','listens'])
+        print(f"Results From GetResultFromDB: {result}")
 
         for i in range(len(result['name'])):
             data['name'].append(result['name'][i])
@@ -651,6 +656,7 @@ def calculateObscurityScore(user_uid):
         RETURN round(avg(n.popularity)) AS obscurityScore
     """
     result = neo4jManager.getResultFromDB(query, params={}, output_values=['obscurityScore'])
+    print(f"Results From ObscurityScore: {result}")
     return int(result['obscurityScore'][0])
 
 @st.cache_data
@@ -679,6 +685,7 @@ def getRecentlyPlayed(user_uid,node_type,current_time,lookback_time):
     }
 
     result = neo4jManager.getResultFromDB(query, params, output_values=['recentlyPlayed'])
+    print(f"Results From GetRecentlyPlayed: {result}")
     return result['recentlyPlayed']
 
 # function will create a pandas dataset that has 4 times of day (Morning, Afternoon, Evening, and Night), 
@@ -706,6 +713,7 @@ def getTimeOfDay(node_type, user_uid):
         """
 
         result = neo4jManager.getResultFromDB(query, params={},output_values=['totalCount'])
+        print(f"Results From GetTimesofDay: {result}")
 
         data['Listens'].append(result['totalCount'][0])
     
@@ -730,6 +738,7 @@ def getFavDetails(name, node_type, user_uid):
         """
 
     result = neo4jManager.getResultFromDB(query=query,params={}, output_values=['image_url","id'])
+    print(f"Results From GetFavDetails: {result}")
 
     return result['image_url'], result['id']
 
