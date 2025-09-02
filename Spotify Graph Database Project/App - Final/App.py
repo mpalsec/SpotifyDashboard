@@ -692,7 +692,7 @@ def getRecentlyPlayed(user_uid,node_type,current_time,lookback_time):
 @st.cache_data
 def getTimeOfDay(node_type, user_uid):
     data = {
-        'Time': ['Morning","Afternoon","Evening","Night'],
+        'Time': ["Morning","Afternoon","Evening","Night"],
         'Listens':[]
     }
 
