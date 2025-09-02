@@ -736,7 +736,7 @@ def getFavDetails(name, node_type, user_uid):
         RETURN n.image_url AS image_url, n.id AS id
         """
 
-    result = neo4jManager.getResultFromDB(query=query,params={}, output_values=['image_url","id'])
+    result = neo4jManager.getResultFromDB(query=query,params={}, output_values=['image_url','id'])
     print(f"Results From GetFavDetails: {result}")
 
     return result['image_url'], result['id']
