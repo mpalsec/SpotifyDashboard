@@ -715,7 +715,7 @@ def getTimeOfDay(node_type, user_uid):
         print(f"Results From GetTimesofDay: {result['totalCount'][0]}")
 
         data['Listens'].append(result['totalCount'][0])
-    
+    print(f"getTimesOfDay Dataframe: {data}")
     df = pd.DataFrame(data)
 
     return df

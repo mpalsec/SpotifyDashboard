@@ -319,7 +319,7 @@ class Neo4jHelper:
             MATCH (n:Config)
             WHERE n.user_uid = "{self.user_uid}"
             SET n.refresh_token_expired = $value
-            RETURN n AS output
+            RETURN n.refresh_token_expired AS output
         """
 
         result = self.getResultFromDB(query,params = {"value":value},output_values=['output'])
@@ -431,7 +431,6 @@ class Neo4jHelper:
                 MATCH (n:Config{{name:"configuration"}})
                 WHERE n.user_uid = "{self.user_uid}"
                 SET n.refresh_token = "{refresh_token}"
-                RETURN n as output
                 """
         
         result = self.runQuery(query)
