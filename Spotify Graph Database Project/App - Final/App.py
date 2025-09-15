@@ -1,4 +1,5 @@
 import streamlit as st
+import os
 import pandas as pd
 from neo4j import GraphDatabase, exceptions
 from Spotify2DBScript import Neo4jHelper,API2DB,apiHelper
@@ -830,8 +831,8 @@ def main():
         neo4jManager.user_uid = st.session_state['user_uid']
     
     # Load the CSS file
-    cssFile = "style.css"
-    with open(cssFile) as f:
+    css_path = os.path.join(os.path.dirname(__file__), 'style.css')
+    with open(css_path) as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 
