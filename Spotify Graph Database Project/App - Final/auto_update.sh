@@ -2,8 +2,8 @@
 
 # CONFIGURATION
 REPO_URL="https://github.com/mpalsec/SpotifyDashboard"
-LOCAL_DIR="/etc/Spotify-App/Source"
-VENV_DIR="/etc/Spotify-App/spotify_app_venv"
+LOCAL_DIR="/etc/spotify_app/repo"
+VENV_DIR="/etc/spotify_app/spotify_app_venv"
 STREAMLIT_APP="App.py"  # Change to your Streamlit main file
 PORT=8501
 
@@ -45,7 +45,7 @@ if [ -d "$LOCAL_DIR/.git" ]; then
         stop_streamlit
         git pull origin main
         python3 venv -m "$VENV_DIR"
-        pip3 install -r "$LOCAL_DIR"/requirements.txt
+        pip install -r "$LOCAL_DIR"/requirements.txt
         start_streamlit
         echo "Streamlit app updated."
     fi
@@ -53,6 +53,6 @@ else
     echo "Repo doesn't exist. Cloning..."
     git clone "$REPO_URL" "$LOCAL_DIR"
     python3 venv -m "$VENV_DIR"
-    pip3 install -r "$LOCAL_DIR"/requirements.txt
+    pip install -r "$LOCAL_DIR"/requirements.txt
     start_streamlit
 fi

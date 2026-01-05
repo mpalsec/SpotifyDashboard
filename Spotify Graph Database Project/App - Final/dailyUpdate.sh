@@ -1,6 +1,7 @@
 REPO_URL="https://github.com/mpalsec/SpotifyDashboard"
-REPO_DIR="/etc/Spotify-App"
-SOURCE_CODE_DIR="/etc/Spotify-App/Source"
+REPO_DIR="/etc/spotify_app"
+SOURCE_CODE_DIR="/etc/spotify_app/repo"
+VENV_DIR="/etc/spotify_app/spotify_app_venv/bin/activate"
 APP_SCRIPT = "App.py"
 APP_PORT=8501
 
@@ -38,7 +39,7 @@ if [ "$LOCAL" != "$REMOTE" ]; then
     # 4. Restart the Streamlit app
     echo "Restarting Streamlit app..."
     nohup streamlit run "$APP_SCRIPT" --server.port $APP_PORT > streamlit.log 2>&1 &
-    sudo source "/etc/SpotifyApp/spotify_app_venv/bin/activate"
+    sudo source "$VENV_DIR"
 else
     echo "No updates. Streamlit app continues running."
 fi
