@@ -21,17 +21,12 @@ import traceback
 import logging
 from email.mime.text import MIMEText
 
-# Set Log Filepaths
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LOG_DIR = os.path.join(BASE_DIR, "logs")
-os.makedirs(LOG_DIR, exist_ok=True)  # creates it if it doesn't exist
-
 # initialize Logger
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S',
-    filename=os.path.join(LOG_DIR, "spotify_app.log")
+    filename=st.secrets["logs"]["app_logs_filepath"]
 )
 
 logger = logging.getLogger(__name__)

@@ -49,17 +49,12 @@ receiver = "mpalmail@protonmail.com"
 # Logging Variables
 #LOGGING_FILEPATH = 'Logs/Spotify2DBPythonScriptLogs.log'
 
-# Set Log Filepaths
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LOG_DIR = os.path.join(BASE_DIR, "logs")
-os.makedirs(LOG_DIR, exist_ok=True)  # creates it if it doesn't exist
-
 # initialize Logger
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S',
-    filename=os.path.join(LOG_DIR, "spotify_data_poller.log")
+    filename=st.secrets["logs"]["poller_logs_filepath"]
 )
 
 logger = logging.getLogger(__name__)
