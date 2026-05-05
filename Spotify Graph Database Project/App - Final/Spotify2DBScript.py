@@ -13,6 +13,7 @@ from neo4j.exceptions import Neo4jError
 import smtplib
 import traceback
 from email.mime.text import MIMEText
+import os
 
 ################################### Code To Pull Auth Code/Token ##################################
 # This Portion of the Code Does The Following:
@@ -46,7 +47,22 @@ sender = "spotify-app@mpalsec.com"
 receiver = "mpalmail@protonmail.com"
 
 # Logging Variables
-LOGGING_FILEPATH = 'Logs/Spotify2DBPythonScriptLogs.log'
+#LOGGING_FILEPATH = 'Logs/Spotify2DBPythonScriptLogs.log'
+
+# Set Log Filepaths
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+LOG_DIR = os.path.join(BASE_DIR, "logs")
+os.makedirs(LOG_DIR, exist_ok=True)  # creates it if it doesn't exist
+
+# initialize Logger
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    filename=os.path.join(LOG_DIR, "spotify_data_poller.log")
+)
+
+logger = logging.getLogger(__name__)
 
 ####################################    Classes    ######################################
 
@@ -58,43 +74,47 @@ class apiHelper():
         self.params = params
 
     def getAuthCodeURL(state):
-        code_verifier = pkce.generate_code_verifier(length=128)
-        code_challenge = pkce.get_code_challenge(code_verifier)
-        
-        # Build the authorization URL with PKCE and state variable
-        params = {
-            'response_type': 'code',
-            'client_id': st.secrets['spotify_api']['client_id'],
-            'state': state,
-            'scope': SCOPE,
-            'code_challenge_method': 'S256',
-            'code_challenge': code_challenge,
-            'redirect_uri': REDIRECT_URI
-        }
+        try:
+            code_verifier = pkce.generate_code_verifier(length=128)
+            code_challenge = pkce.get_code_challenge(code_verifier)
+            
+            # Build the authorization URL with PKCE and state variable
+            params = {
+                'response_type': 'code',
+                'client_id': st.secrets['spotify_api']['client_id'],
+                'state': state,
+                'scope': SCOPE,
+                'code_challenge_method': 'S256',
+                'code_challenge': code_challenge,
+                'redirect_uri': REDIRECT_URI
+            }
 
-        # Create the full Auth URL (With Required Parameters)
-        auth_url = f"{AUTHORIZATION_URL}?{urlencode(params)}"
-        return auth_url,code_verifier
+            # Create the full Auth URL (With Required Parameters)
+            auth_url = f"{AUTHORIZATION_URL}?{urlencode(params)}"
+            return auth_url,code_verifier
+        except Exception as e:
+            logger.error(f"Could Not Pull Auth Code: {e}")
 
     def getRefreshToken(self, Neo4jManager, auth_code = None,code_verifier = None,refresh_token = None):
-        #Exchange the authorization code for an access token if an auth code is provided
-        if refresh_token is not None:
-            token_data = {
-                'grant_type': 'refresh_token',
-                'refresh_token': refresh_token,
-                'client_id': st.secrets['spotify_api']['client_id']
-            }
-        #use the refresh token to fetch a new access token if provided
-        elif auth_code is not None:
-            token_data = {
-                'grant_type': 'authorization_code',
-                'code': auth_code,
-                'redirect_uri': REDIRECT_URI,
-                'client_id': st.secrets['spotify_api']['client_id'],
-                'code_verifier': code_verifier  # Important: Use the original code verifier
-            }
-        else:
-            print("Error: No Auth Code or Refresh Token Was Provided. Please Attach one of these to function")
+        try:
+            #Exchange the authorization code for an access token if an auth code is provided
+            if refresh_token is not None:
+                token_data = {
+                    'grant_type': 'refresh_token',
+                    'refresh_token': refresh_token,
+                    'client_id': st.secrets['spotify_api']['client_id']
+                }
+            #use the refresh token to fetch a new access token if provided
+            elif auth_code is not None:
+                token_data = {
+                    'grant_type': 'authorization_code',
+                    'code': auth_code,
+                    'redirect_uri': REDIRECT_URI,
+                    'client_id': st.secrets['spotify_api']['client_id'],
+                    'code_verifier': code_verifier  # Important: Use the original code verifier
+                }
+        except Exception as e:
+            logger.error("No Auth Code or Refresh Token Was Provided. Please Attach one of these to function")
             return None,None
 
         response = requests.post(TOKEN_URL, data=token_data)
@@ -104,15 +124,16 @@ class apiHelper():
             access_token = tokens['access_token']
             refresh_token = tokens.get('refresh_token')
 
-            if Neo4jManager.storeRefreshToken(refresh_token):
-                print("refresh token successfully stored")
-            else:
-                print("Error: refresh token could not be stored")
+            try:
+                Neo4jManager.storeRefreshToken(refresh_token)
+                logger.info("refresh token successfully stored")
+            except Exception as e:
+                logger.error("refresh token could not be stored")
 
             return access_token,refresh_token
         
         else:
-            print(f"Failed to get tokens: {response.status_code} {response.text}")
+            logger.error(f"Failed to get refresh tokens: {response.status_code} {response.text}")
             return None,None
 
     ''' function that handles reading API Calls. The type variable determines which API Call we are making. 
@@ -183,8 +204,7 @@ class apiHelper():
                 results = api_response_json
 
         else:
-            print(f"Failed to fetch API data: {api_response.status_code} {api_response.text}")
-            logging.error(f"Failed to fetch API data: {api_response.status_code} {api_response.text}")
+            logger.error(f"Failed to fetch API data | status={api_response.status_code} | response={api_response.text} | api_type={type}")
 
             # Return a 0 for error handling in function
             return 0
@@ -209,11 +229,11 @@ class Neo4jHelper:
                 try:
                     result = driver.execute_query(query, params, result_transformer_= neo4j.Result.to_df)
 
-                    #logging.info(f"Neo4j Query Successful. Results returned were: {result}\n\nQuery ran was: {query}")
+                    logger.info(f"Neo4j Query Successful | response={result} | query={query}")
                     return result
 
                 except Neo4jError as e:
-                    print(f"Neo4j error occurred: {e.code} - {e.message}")
+                    logger.error(f"Neo4j error | error_code={e.code} | error_message={e.message}")
                     return None
 
                 finally:
@@ -224,30 +244,29 @@ class Neo4jHelper:
 
         except exceptions.ServiceUnavailable as e:
             # Handle connection error, possibly retry
-            print(f"Service unavailable error: {str(e)}")
+            logger.error(f"Service unavailable error: {str(e)}")
 
         except exceptions.AuthError as e:
             # Handle incorrect credentials
-            print(f"Authentication error: {str(e)}")
+            logger.error(f"Authentication error: {str(e)}")
 
         except exceptions.CypherSyntaxError as e:
             # Handle query syntax error
-            print(f"Cypher syntax error: {str(e)}")
+            logger.error(f"Cypher syntax error: {str(e)}")
 
         except exceptions.ConstraintError as e:
             # Handle unique constraint violations, etc.
-            print(f"Constraint violation error: {str(e)}")
+            logger.error(f"Constraint violation error: {str(e)}")
 
         except exceptions.TransactionError as e:
             # Handle transaction issues
-            print(f"Transaction error: {str(e)}")
+            logger.error(f"Transaction error: {str(e)}")
 
         except Exception as e:
             # Catch any other errors that are not covered above
-            print(f"An unexpected error occurred: {str(e)}")
+            logger.error(f"An unexpected error occurred: {str(e)}")
 
         finally:
-
             pass
 
     # deletes all nodes associated with a specific user uid
@@ -258,18 +277,16 @@ class Neo4jHelper:
         """
 
         neo4j_result = Neo4jHelper.runQuery(self,query,{'user_uid':user_uid})
-        print(f"Results From deleteUserNodes: {neo4j_result}")
 
         if neo4j_result is not None:
 
             if neo4j_result['deleted_count'][0] > 0:
-                print("User successfully deleted")
+                logger.info("User successfully deleted")
                 return neo4j_result['deleted_count'][0]
             else:
-                print("Error: user was not successfully deleted")
+                logger.error(f"User was not successfully deleted | user_uid={user_uid}")
                 return False
         else:
-            print("neo4j query failed")
             return False
 
 
@@ -289,8 +306,7 @@ class Neo4jHelper:
 
             return results
 
-        else:
-            print("Query failed but program is continuing.")       
+        else:    
             return False
 
 
@@ -305,11 +321,9 @@ class Neo4jHelper:
         result = self.getResultFromDB(query,params = {},output_values=['refreshTokenExpired'])
 
         if result is not None:
-            print("Query Succeeded:", result)
             return result['refreshTokenExpired'][0]
 
         else:
-            print("neo4j query failed")
             return False
 
     # pulls Boolean indicator that indicates whether a refresh token is expired or not
@@ -329,7 +343,6 @@ class Neo4jHelper:
             return True
 
         else:
-            print("neo4j query failed while sto")
             return False
 
     # Checks if a node in DB Exists
@@ -378,8 +391,9 @@ class Neo4jHelper:
                 """
             
             case _:
-                print(f"Error: unrecognized type: {type}")
+                logger.error(f"Unrecognized type when checking if node exists | type={type} | id={id}")
                 return
+            
         result = self.getResultFromDB(query=query,params={"id":id},output_values=['exists'])
 
         return result['exists'][0]
@@ -407,20 +421,20 @@ class Neo4jHelper:
         if refresh_token == "":
 
             # try pulling a new access token/refresh token
-            print("Fetching New Refresh Token")
+            logger.info(f"Fetched New Refresh Token | user_uid={self.user_uid}")
             access_token, refresh_token = apiManager.getRefreshToken(Neo4jManager=self, refresh_token = refresh_token)
 
             if (refresh_token is None):
                 print("refresh token is expired... ")
-                logging.info('refresh token is expired... ')
+                logger.info(f'refresh token is expired | user_uid={self.user_uid} ')
 
                 return False
             else:
-                print("Storing Refresh Token in DB")
+                logger.info(f"Storing Refresh Token in UserDB | user_uid={self.user_uid}")
                 self.storeRefreshToken(refresh_token = refresh_token)
                 return True
         else:
-            print("Refresh Token Exists in DB")
+            logger.info(f"Refresh Token Exists in Neo4j DB | user_uid={self.user_uid}")
             access_token, refresh_token = apiManager.getRefreshToken(Neo4jManager=self, refresh_token = refresh_token)
             return True
 
@@ -437,8 +451,7 @@ class Neo4jHelper:
 
         if result is not None:
             return True
-        else:
-            print("Query failed but program is continuing.")       
+        else:     
             return False
     
     # gets API refresh token from database
@@ -465,8 +478,7 @@ class Neo4jHelper:
 
         timestamp = self.getResultFromDB(query=query,params={},output_values=['last_sync_timestamp'])
         
-        print(f"Timestamp from DB: {timestamp['last_sync_timestamp'][0]}")
-        logging.info(f"Timestamp from DB: {timestamp['last_sync_timestamp'][0]}")
+        logger.info(f"Timestamp from DB: {timestamp['last_sync_timestamp'][0]}")
         return timestamp['last_sync_timestamp'][0]
     
     # stores Last Sync Timestamp in Database
@@ -530,9 +542,9 @@ class Neo4jHelper:
 
         if result is not None:
             print(f"{pathType} path has been created between node {node_id_a} to {node_id_b}")
+            logging.info(f"Path Created | user_uid={self.user_uid} | path_type={pathType} | node_id_a={node_id_a} | node_type_a={node_type_a} | node_id_b={node_id_b} | node_type_b={node_type_b}")
             return True
-        else:
-            print("Query failed but program is continuing.")       
+        else:    
             return False
 
     def createNode(self,type="",params=None):
@@ -602,12 +614,11 @@ class Neo4jHelper:
         if result is not None:
             
             if(type != "config"):
-                logging.info(f"Created {type} node for {type} named {params['name']} with id {params['id']}")
+                logger.info(f"Created {type} node for {type} named {params['name']} with id {params['id']}")
             else:
-                logging.info(f"config node successfully created")
+                logger.info(f"config node successfully created")
             return True
-        else:
-            print("Query failed but program is continuing.")       
+        else:     
             return False
 
     # function checks to see if genre path is previously created. Used to prevent duplicate paths
@@ -907,12 +918,6 @@ def mailtrap_error_handler(main_func):
 
 # the main function that pulls API data into DB. Made separate from main function so that it can be run in main app file.
 def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_bar = None):
-     # Configure the logger
-    logging.basicConfig(
-        filename=LOGGING_FILEPATH,                               # Log file name
-        level=logging.DEBUG,                                # Log level
-        format='%(asctime)s - %(levelname)s - %(message)s'  # Log format
-    )
     print("In API2DB Function")
 
     # instantiate apiHelper and neo4jHelper to make API and DB calls
@@ -945,10 +950,12 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
     #if access token isn't able to get pulled, throw an error and store metric in DB to tell front end that refresh token is expired
     if access_token is False:
         st.error('Error: access token was unable to be pulled.. this likely means the refresh token is expired. Rerun so user can reauthorize', icon=":material/sentiment_dissatisfied:")
+        logger.error(f"Access token doesn't exist for user_uid={user_uid}, refresh_token needs to be pulled")
         if neo4jManager.storeRefreshTokenExpired(True):
             print("refresh token expired state successfully stored")
+            logger.info(f"refresh token stored for user with ID: {user_uid}")
         else:
-            print("Error: Refresh Token Expired State not successfully stored")
+            logger.error(f"refresh token unable to be stored for user with ID: {user_uid}")
 
         return "refreshTokenExpired"
     else:
@@ -965,7 +972,7 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
     else:
         recently_played_tracks = convertJSON(recently_played_data,"track")
 
-    logging.info(f"Successfully Pulled Recently Played List. There are {len(recently_played_tracks)} tracks in the result")
+    logger.info(f"Successfully Pulled Recently Played List. There are {len(recently_played_tracks)} tracks in the result")
     
 
     # get the timestamp associated with the last play time for the song most recently played in DB
@@ -986,8 +993,8 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
         # used to ensure there is no overlap between syncs
         if(last_sync_timestamp < played_at_timestamp):
 
-            logging.info(f"name of current track: {recently_played_tracks[track]['name']}")
-            logging.info(f"track play time: {played_at_timestamp}")
+            logger.info(f"name of current track: {recently_played_tracks[track]['name']}")
+            logger.info(f"track play time: {played_at_timestamp}")
 
             #if the track already exists in DB, then overwrite its popularity, last played, preview_url, and iterate times played
             if(neo4jManager.check_node_exists(track,"track")):
@@ -1036,12 +1043,12 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
 
             # if an error is returned when making call.. skip storing in DB
             if(album_results == 0):
-                logging.error(f"Received an Error When Making API Call.. Skipping The entry for {artist}")
+                logger.error(f"Received an Error When Making API Call.. Skipping The entry for {artist}")
             else:
                 album_results = convertJSON(album_results,"album")
 
                 album_id = recently_played_tracks[track]['album']['id']
-                logging.info(f"making API Call to Pull Data For Album With ID {album_id}")
+                logger.info(f"making API Call to Pull Data For Album With ID {album_id}")
 
                 # if album exists, update params
                 if(neo4jManager.check_node_exists(album_id,"album")):
@@ -1100,14 +1107,14 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
                 
                 # pull id of artist
                 artist_id = artist['id']
-                logging.info(f"making API Call to Pull Data For Artist With ID {artist_id}")
+                logger.info(f"making API Call to Pull Data For Artist With ID {artist_id}")
 
                 # Make API Call to pull artist info and convert to stripped down JSON object
                 artist_results = apiManager.getAPIResponse("artist",url=artist['url'])
 
                 # if an error is returned when making call.. skip storing in DB
                 if(artist_results == 0):
-                    logging.error(f"Received an Error When Making API Call.. Skipping The entry for {artist}")
+                    logger.error(f"Received an Error When Making API Call.. Skipping The entry for {artist}")
 
                 else:
                     artist_results = convertJSON(artist_results,"artist")
@@ -1176,13 +1183,13 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
                 # pull id of playlist
                 playlist_id = recently_played_tracks[track]['context']['id']
 
-                logging.info(f"making API Call to Pull Data For Playlist With ID {playlist_id}")
+                logger.info(f"making API Call to Pull Data For Playlist With ID {playlist_id}")
 
                 # make API call to get additional info about playlist
                 playlist_results = apiManager.getAPIResponse("playlist",url=recently_played_tracks[track]['context']['url'])
 
                 if(playlist_results == 0):
-                    logging.error(f"Received an Error When Making API Call.. Skipping The entry for {playlist_id}")
+                    logger.error(f"Received an Error When Making API Call.. Skipping The entry for {playlist_id}")
                 else:
                     playlist_results = convertJSON(playlist_results,"playlist")
 

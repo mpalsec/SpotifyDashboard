@@ -18,7 +18,23 @@ import secrets
 import base64
 import smtplib
 import traceback
+import logging
 from email.mime.text import MIMEText
+
+# Set Log Filepaths
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+LOG_DIR = os.path.join(BASE_DIR, "logs")
+os.makedirs(LOG_DIR, exist_ok=True)  # creates it if it doesn't exist
+
+# initialize Logger
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    filename=os.path.join(LOG_DIR, "spotify_app.log")
+)
+
+logger = logging.getLogger(__name__)
 
 # initialize Neo4jHelper for making db queries, along w/ an apiHelper for spotify API calls and docker for creating new neo4j DBs
 neo4jManager = Neo4jHelper(user_uid="")
@@ -95,47 +111,102 @@ def mailtrap_error_handler(main_func):
 # projection is used in conjunction with the "find" or "find_one" queries, and is a dictionary that outlines which fields should be returned from the document
 @mailtrap_error_handler
 def run_query(query, query_type, database_name, collection_name, update={}, projection={}):
+    logger.info(f"run_query called | query_type='{query_type}' | database='{database_name}' | collection='{collection_name}' | query={query}")
+
     client_string = f"""{st.secrets['user_database']['username']}:{quote_plus(f"{st.secrets['user_database']['password']}")}@localhost:27017/{st.secrets['user_database']['database_name']}"""
     
-    client = MongoClient(f"""mongodb://{st.secrets['user_database']['username']}:{quote_plus(f"{st.secrets['user_database']['password']}")}@localhost:27017/{st.secrets['user_database']['database_name']}""")
-    db = client[database_name]
-    collection = db[collection_name]
+    try:
+        client = MongoClient(f"""mongodb://{st.secrets['user_database']['username']}:{quote_plus(f"{st.secrets['user_database']['password']}")}@localhost:27017/{st.secrets['user_database']['database_name']}""")
+        db = client[database_name]
+        collection = db[collection_name]
+        logger.info(f"Successfully connected to MongoDB | database='{database_name}' | collection='{collection_name}'")
+    
+    except Exception as e:
+        logger.error(f"Failed to connect to MongoDB | error={e}")
+        return {}
 
     if query_type == "find":
-        if projection == {}:
-            result = list(collection.find(query))
-        else:
-            result = list(collection.find(query, projection))
+        logger.info(f"Executing FIND query | projection={projection if projection else 'none'}")
+        try:
+            if projection == {}:
+                result = list(collection.find(query))
+            else:
+                result = list(collection.find(query, projection))
+            logger.info(f"FIND query successful | documents_returned={len(result)}")
 
+        except Exception as e:
+            logger.error(f"FIND query failed | query={query} | error={e}")
+            return {}
+    
+    elif query_type == "find_one":
+        logger.info(f"Executing FIND_ONE query | projection={projection if projection else 'none'}")
+        try:
+            if projection == {}:
+                result = collection.find_one(query)
+            else:
+                result = collection.find_one(query, projection)
+            if result:
+                logger.info(f"FIND_ONE query successful | document_found=True")
+            else:
+                logger.warning(f"FIND_ONE query returned no results | query={query}")
+            result = [result] if result else []
+        except Exception as e:
+            logger.error(f"FIND_ONE query failed | query={query} | error={e}")
+            return {}
+        
     elif query_type == "delete":
-        # delete document
-        result = collection.delete_many(query)
-
-        if result.deleted_count > 0:
-            print("Successfully Deleted User!")
-            result = True
-        else:
-            print("no matching document found to delete")
-            result = False
+        logger.info(f"Executing DELETE query | query={query}")
+        try:
+            result = collection.delete_many(query)
+            if result.deleted_count > 0:
+                logger.info(f"DELETE successful | documents_deleted={result.deleted_count}")
+                result = True
+            else:
+                logger.warning(f"DELETE found no matching documents | query={query}")
+                result = False
+        except Exception as e:
+            logger.error(f"DELETE query failed | query={query} | error={e}")
+            return {}
 
     elif query_type == "create":
-        result = list(collection.insert_one(query))
+        logger.info(f"Executing CREATE query | document={query}")
+        try:
+            insert_result = collection.insert_one(query)
+            logger.info(f"CREATE successful | inserted_id={insert_result.inserted_id}")
+            result = [query]
+        except Exception as e:
+            logger.error(f"CREATE query failed | document={query} | error={e}")
+            return {}
 
     elif query_type == "update":
-        #print(f"update: {update}")
-        result_not_passed = collection.update_one(query, {"$set": update})
+        logger.info(f"Executing UPDATE query | query={query} | update={update}")
+        try:
+            update_result = collection.update_one(query, {"$set": update})
+            if update_result.matched_count > 0:
+                logger.info(f"UPDATE successful | matched={update_result.matched_count} | modified={update_result.modified_count}")
+            else:
+                logger.warning(f"UPDATE found no matching documents | query={query}")
+            result = list(collection.find(query))
+            logger.info(f"UPDATE post-fetch returned {len(result)} document(s)")
+        except Exception as e:
+            logger.error(f"UPDATE query failed | query={query} | update={update} | error={e}")
+            return {}
 
-        result = list(collection.find(query))
 
     else:
-        print("Error: invalid query_type")
+        logger.error(f"Invalid query_type='{query_type}' passed to run_query | valid types: find, find_one, delete, create, update")
         return {}
     
-    client.close()
+    finally:
+        client.close()
+        logger.info("MongoDB connection closed")
 
     if result:
+        logger.info(f"run_query returning first result")
         return result[0]
+
     else:
+        logger.warning(f"run_query returning 0 | no results found | query_type='{query_type}' | query={query}")
         return 0
     
 
@@ -149,8 +220,10 @@ def validate_password(email, password):
     else:
         if bcrypt.checkpw(input_password, result['password_hash']):
             print("Passwords Match")
+            logger.info(f"{email} Logged In Successfully")
             return "loggedIn"
         else:
+            logger.warning(f"{email} Failed Login Attempt")
             print("Passwords Don't Match")
             return "passwordMismatch"
 
@@ -163,10 +236,13 @@ def delete_user(user_uid):
 
     if (neo4j_result and result):
         print(f"successfully deleted the user with id {user_uid}")
+        logger.info(f"Account Deleted By User. ID Was: {user_uid}")
         return True
     elif(neo4j_result):
+        logger.error(f"Error: received error while trying to delete neo4j nodes for user with id {user_uid}")
         print(f"Error: received error while trying to delete neo4j nodes for user with id {user_uid}")
     elif(result):
+        logger.error(f"Error: received error while trying to delete neo4j nodes for user with id {user_uid}"")
         print(f"Error: received error while trying to delete mongo document for user with id {user_uid}")
 
 def logout_user(user_uid):
@@ -223,6 +299,7 @@ def update_user_attribute(email, updates):
     # Check if the update was successful
     if result.matched_count:
         print(f"updated successfully!")
+        logger.info(f"Updating Account | user={email} | updated_attributes={list(updates.keys())}")
     else:
         print("No matching document found.")
 
@@ -241,6 +318,7 @@ def get_user_uid(email):
     result = run_query({"email": email}, "find", st.secrets['user_database']['database_name'], st.secrets['user_database']['collection_name'], projection={"user_uid":1, "_id":0})
     print(f"user_uid result: {result}")
     if not result:
+        logger.warning(f"{email} Cannot be Found in DB")
         print(f"Error: {email} not in Mongo DB")
         return None
     else:
@@ -335,7 +413,6 @@ def getNumberTracks(user_uid):
     """
 
     result = neo4jManager.getResultFromDB(query,params={},output_values=['track_count'])
-    print(f"number of tracks array: {result}")
     return result['track_count'][0]
 
 # function calculates the user's recency engagement score (RES). This score is a way of measuring
@@ -871,8 +948,7 @@ def main():
         
         # state mismatch if a state cant be found in db
         else:
-            print("Error: State could not be found")
-            print("Error: State mismatch in API Call. Could Be a Potential CSRF Attack")
+            logger.error("Error: State mismatch in API Call. Could Be a Potential CSRF Attack")
             st.session_state['page_state'] = 2
             st.session_state['error_message'] = "Error: State mismatch in API Call. Could Be a Potential CSRF Attack" 
 
@@ -880,7 +956,7 @@ def main():
     else:
         # ensure streamlit login cache state variable exists. If not, set to false and rerun
         if 'streamlitLoggedIn' not in st.session_state:
-            print("streamlitLoggedIn not added to cache.. adding...")
+            logging.info("streamlitLoggedIn not added to cache.. adding...")
             st.session_state['streamlitLoggedIn'] = False
             st.session_state['page_state'] = 2
             st.rerun()
@@ -914,7 +990,7 @@ def main():
                 st.session_state['user_name'] = result['name']
 
                 if not result:
-                    print(f"Error: {st.session_state['user_uid']} does not have an email... returning to login...")
+                    logging.error(f"{st.session_state['user_uid']} does not have an email... returning to login...")
                     st.session_state['page_state'] = 2
                 else:
                     st.session_state['page_state'] = 1
@@ -930,7 +1006,6 @@ def main():
 
     # if refresh token doesn't exist in db or is expired, create login button that will initiate oauth flow
     if(st.session_state['page_state'] == 0):
-        print("Within Login Session")
 
         # if button is pressed, generate auth url, store state and verifier in DB, and redirect user to spotify auth page
         # need to store in DB and not using caching is because when redirected back, a new streamlink session is started, and cache 
@@ -941,65 +1016,69 @@ def main():
             
             with col1:
                 if st.button("Login To Spotify"):
+                    try:
+                        # Generate auth url to be used
+                        result = run_query({"email":st.session_state['user_email']}, "find", st.secrets['user_database']['database_name'], st.secrets['user_database']['collection_name'], projection={'state':1, '_id':0})
+                        auth_url,code_verifier = apiHelper.getAuthCodeURL(result['state'])
                     
-                    # Generate auth url to be used
-                    result = run_query({"email":st.session_state['user_email']}, "find", st.secrets['user_database']['database_name'], st.secrets['user_database']['collection_name'], projection={'state':1, '_id':0})
-                    auth_url,code_verifier = apiHelper.getAuthCodeURL(result['state'])
-                
-                    params = {
-                        'state':result['state'],
-                        'code_verifier':code_verifier
-                    }
+                        params = {
+                            'state':result['state'],
+                            'code_verifier':code_verifier
+                        }
 
-                    # stores state and code_verifier in user db before navigating user to spotify API auth page
-                    result = run_query({"user_uid":st.session_state['user_uid']},"update", st.secrets['user_database']['database_name'], st.secrets['user_database']['collection_name'], update={"state": result['state'], "code_verifier":code_verifier})
+                        # stores state and code_verifier in user db before navigating user to spotify API auth page
+                        result = run_query({"user_uid":st.session_state['user_uid']},"update", st.secrets['user_database']['database_name'], st.secrets['user_database']['collection_name'], update={"state": result['state'], "code_verifier":code_verifier})
 
-                    # create a new session, using the state generated as a "session_id" will be used to track sessions because streamlit resets cache
-                    # when a redirect occurs
-                    print("generated Auth URL..")
-                    print("Login Button Pressed.. Running Oauth Flow..")
-                    nav_to_auth_url(auth_url)
+                        # create a new session, using the state generated as a "session_id" will be used to track sessions because streamlit resets cache
+                        # when a redirect occurs
+                        logging.info(f"Navigating user with ID {user_uid} to OAuth URL")
+                        nav_to_auth_url(auth_url)
 
-                    # Wait for user to authorize scope by checking if url has auth code param inside it
-                    i = False
-                    while 'code' not in st.query_params:
-                        if(i == False):
-                            i=True
-                            print("Waiting For User To Auth")
-                        #print(f"query params before webpage is opened: {st.query_params}")
+                        # Wait for user to authorize scope by checking if url has auth code param inside it
+                        i = False
+                        while 'code' not in st.query_params:
+                            if(i == False):
+                                i=True
+                                print("Waiting For User To Auth")
+                            #print(f"query params before webpage is opened: {st.query_params}")
+                    except Exception as e:
+                        logger.error(f"Failed To Run OAuth Flow For User | uid={user_uid} | user_email={st.session_state['email']} | error={e}")
         
         # If we are being redirected back from Authorization page, then pull the auth code, use it to get a refresh token, and store in DB        
         if 'code' and 'state' in st.query_params:
-            print("in code/state")
             st.empty()
             with st.spinner("Pulling Spotify Stats..."):
-                neo4jManager.user_uid = st.session_state['user_uid']
+                try:
+                    neo4jManager.user_uid = st.session_state['user_uid']
 
-                # get a new refresh token and access token, and store in DB
-                print("getting access token to sync\n")
-                access_token, refresh_token = apiManager.getRefreshToken(Neo4jManager=neo4jManager,auth_code=st.query_params['code'],code_verifier=result['code_verifier'])
+                    # get a new refresh token and access token, and store in DB
+                    print("getting access token to sync\n")
+                    access_token, refresh_token = apiManager.getRefreshToken(Neo4jManager=neo4jManager,auth_code=st.query_params['code'],code_verifier=result['code_verifier'])
 
-                #if access token isn't able to get pulled, throw an error and store metric in DB to tell front end that refresh token is expired
-                if access_token is None:
-                    st.error('Error: access token was unable to be pulled.. this likely means the refresh token is expired. Rerun so user can reauthorize', icon=":material/sentiment_dissatisfied:")
-                    neo4jManager.storeRefreshTokenExpired(True)
-                    st.session_state['page_state'] = 0
+                    #if access token isn't able to get pulled, throw an error and store metric in DB to tell front end that refresh token is expired
+                    if access_token is None:
+                        st.error('Error: access token was unable to be pulled.. this likely means the refresh token is expired. Rerun so user can reauthorize', icon=":material/sentiment_dissatisfied:")
+                        neo4jManager.storeRefreshTokenExpired(True)
+                        st.session_state['page_state'] = 0
+                        st.rerun()
+                    else:
+                        print("Access Token successfully pulled")
+                        neo4jManager.storeRefreshTokenExpired(False)
+                        neo4jManager.storeRefreshToken(refresh_token)
+                    
+                    # set state to display dashboard, clear the params returned by API, then make some balloons pop!
+                    st.session_state['page_state'] = 1
+                    st.session_state['streamlitLoggedIn'] = True
+                    st.query_params.clear()
+                    st.balloons()
+
+                    access_token = ""
+                    refresh_token = ""
+
                     st.rerun()
-                else:
-                    print("Access Token successfully pulled")
-                    neo4jManager.storeRefreshTokenExpired(False)
-                    neo4jManager.storeRefreshToken(refresh_token)
-                
-                # set state to display dashboard, clear the params returned by API, then make some balloons pop!
-                st.session_state['page_state'] = 1
-                st.session_state['streamlitLoggedIn'] = True
-                st.query_params.clear()
-                st.balloons()
 
-                access_token = ""
-                refresh_token = ""
-
-                st.rerun()
+                except Exception as e:
+                    logger.error(f"Unable to Poll Spotify Stats | user_uid={user_uid} | user_email={st.session_state['email']} | error={e}")
         else:
             st.title("Spotify Stats Page")
             st.write(
@@ -1052,6 +1131,7 @@ def main():
             print(f"result of user_uid: {result}")
             if result is None:
                 st.error(f"Error: {st.session_state['email']} is not a valid email. Please sign up or try retyping email")
+                logger.error(f"User Attempted to Login | user_email={st.session_state['email']} | user_uid={user_uid}")
                 st.session_state['page_state'] = 2
                 st.rerun()
             else:
@@ -1264,9 +1344,11 @@ def main():
 
                     elif (result == "passwordMismatch"):
                         st.session_state['error_message'] = f"Error: Incorrect Credentials. Please try again.."
+                        logger.error(f"User Entered Wrong Password | user_email={st.session_state['email']} | user_uid={user_uid}")
 
                     elif (result == "noUser"):
                         st.session_state['error_message'] = f"Error: account with this email does not exist. Please create an account by selecting 'Sign Up'"
+                        logger.error(f"Account Logged in From Doesn't Exist | user_email={st.session_state['email']} | user_uid={user_uid}")
 
                 if 'error_message' in st.session_state:
                     st.error(st.session_state.error_message)
