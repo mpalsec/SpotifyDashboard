@@ -128,79 +128,79 @@ def run_query(query, query_type, database_name, collection_name, update={}, proj
     except Exception as e:
         logger.error(f"Failed to connect to MongoDB | error={e}")
         return {}
+    try:
+        if query_type == "find":
+            logger.info(f"Executing FIND query | projection={projection if projection else 'none'}")
+            try:
+                if projection == {}:
+                    result = list(collection.find(query))
+                else:
+                    result = list(collection.find(query, projection))
+                logger.info(f"FIND query successful | documents_returned={len(result)}")
 
-    if query_type == "find":
-        logger.info(f"Executing FIND query | projection={projection if projection else 'none'}")
-        try:
-            if projection == {}:
+            except Exception as e:
+                logger.error(f"FIND query failed | query={query} | error={e}")
+                return {}
+        
+        elif query_type == "find_one":
+            logger.info(f"Executing FIND_ONE query | projection={projection if projection else 'none'}")
+            try:
+                if projection == {}:
+                    result = collection.find_one(query)
+                else:
+                    result = collection.find_one(query, projection)
+                if result:
+                    logger.info(f"FIND_ONE query successful | document_found=True")
+                else:
+                    logger.warning(f"FIND_ONE query returned no results | query={query}")
+                result = [result] if result else []
+            except Exception as e:
+                logger.error(f"FIND_ONE query failed | query={query} | error={e}")
+                return {}
+            
+        elif query_type == "delete":
+            logger.info(f"Executing DELETE query | query={query}")
+            try:
+                result = collection.delete_many(query)
+                if result.deleted_count > 0:
+                    logger.info(f"DELETE successful | documents_deleted={result.deleted_count}")
+                    result = True
+                else:
+                    logger.warning(f"DELETE found no matching documents | query={query}")
+                    result = False
+            except Exception as e:
+                logger.error(f"DELETE query failed | query={query} | error={e}")
+                return {}
+
+        elif query_type == "create":
+            logger.info(f"Executing CREATE query | document={query}")
+            try:
+                insert_result = collection.insert_one(query)
+                logger.info(f"CREATE successful | inserted_id={insert_result.inserted_id}")
+                result = [query]
+            except Exception as e:
+                logger.error(f"CREATE query failed | document={query} | error={e}")
+                return {}
+
+        elif query_type == "update":
+            logger.info(f"Executing UPDATE query | query={query} | update={update}")
+            try:
+                update_result = collection.update_one(query, {"$set": update})
+                if update_result.matched_count > 0:
+                    logger.info(f"UPDATE successful | matched={update_result.matched_count} | modified={update_result.modified_count}")
+                else:
+                    logger.warning(f"UPDATE found no matching documents | query={query}")
                 result = list(collection.find(query))
-            else:
-                result = list(collection.find(query, projection))
-            logger.info(f"FIND query successful | documents_returned={len(result)}")
+                logger.info(f"UPDATE post-fetch returned {len(result)} document(s)")
+            except Exception as e:
+                logger.error(f"UPDATE query failed | query={query} | update={update} | error={e}")
+                return {}
 
-        except Exception as e:
-            logger.error(f"FIND query failed | query={query} | error={e}")
-            return {}
-    
-    elif query_type == "find_one":
-        logger.info(f"Executing FIND_ONE query | projection={projection if projection else 'none'}")
-        try:
-            if projection == {}:
-                result = collection.find_one(query)
-            else:
-                result = collection.find_one(query, projection)
-            if result:
-                logger.info(f"FIND_ONE query successful | document_found=True")
-            else:
-                logger.warning(f"FIND_ONE query returned no results | query={query}")
-            result = [result] if result else []
-        except Exception as e:
-            logger.error(f"FIND_ONE query failed | query={query} | error={e}")
+
+        else:
+            logger.error(f"Invalid query_type='{query_type}' passed to run_query | valid types: find, find_one, delete, create, update")
             return {}
         
-    elif query_type == "delete":
-        logger.info(f"Executing DELETE query | query={query}")
-        try:
-            result = collection.delete_many(query)
-            if result.deleted_count > 0:
-                logger.info(f"DELETE successful | documents_deleted={result.deleted_count}")
-                result = True
-            else:
-                logger.warning(f"DELETE found no matching documents | query={query}")
-                result = False
-        except Exception as e:
-            logger.error(f"DELETE query failed | query={query} | error={e}")
-            return {}
-
-    elif query_type == "create":
-        logger.info(f"Executing CREATE query | document={query}")
-        try:
-            insert_result = collection.insert_one(query)
-            logger.info(f"CREATE successful | inserted_id={insert_result.inserted_id}")
-            result = [query]
-        except Exception as e:
-            logger.error(f"CREATE query failed | document={query} | error={e}")
-            return {}
-
-    elif query_type == "update":
-        logger.info(f"Executing UPDATE query | query={query} | update={update}")
-        try:
-            update_result = collection.update_one(query, {"$set": update})
-            if update_result.matched_count > 0:
-                logger.info(f"UPDATE successful | matched={update_result.matched_count} | modified={update_result.modified_count}")
-            else:
-                logger.warning(f"UPDATE found no matching documents | query={query}")
-            result = list(collection.find(query))
-            logger.info(f"UPDATE post-fetch returned {len(result)} document(s)")
-        except Exception as e:
-            logger.error(f"UPDATE query failed | query={query} | update={update} | error={e}")
-            return {}
-
-
-    else:
-        logger.error(f"Invalid query_type='{query_type}' passed to run_query | valid types: find, find_one, delete, create, update")
-        return {}
-    
     finally:
         client.close()
         logger.info("MongoDB connection closed")
