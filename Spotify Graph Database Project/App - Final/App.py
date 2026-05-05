@@ -242,7 +242,7 @@ def delete_user(user_uid):
         logger.error(f"Error: received error while trying to delete neo4j nodes for user with id {user_uid}")
         print(f"Error: received error while trying to delete neo4j nodes for user with id {user_uid}")
     elif(result):
-        logger.error(f"Error: received error while trying to delete neo4j nodes for user with id {user_uid}"")
+        logger.error(f"Error: received error while trying to delete neo4j nodes for user with id {user_uid}")
         print(f"Error: received error while trying to delete mongo document for user with id {user_uid}")
 
 def logout_user(user_uid):
