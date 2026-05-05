@@ -20,6 +20,15 @@ import smtplib
 import traceback
 import logging
 from email.mime.text import MIMEText
+from logging.handlers import RotatingFileHandler
+
+
+# setup handler for logs
+handler = RotatingFileHandler(
+    st.secrets["logs"]["app_logs_filepath"],
+    maxBytes=5 * 1024 * 1024,  # 5 MB per file
+    backupCount=5               # keeps last 3 rotated files
+)
 
 # initialize Logger
 logging.basicConfig(

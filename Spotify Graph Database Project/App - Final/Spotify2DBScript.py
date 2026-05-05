@@ -14,6 +14,7 @@ import smtplib
 import traceback
 from email.mime.text import MIMEText
 import os
+from logging.handlers import RotatingFileHandler
 
 ################################### Code To Pull Auth Code/Token ##################################
 # This Portion of the Code Does The Following:
@@ -48,6 +49,12 @@ receiver = "mpalmail@protonmail.com"
 
 # Logging Variables
 #LOGGING_FILEPATH = 'Logs/Spotify2DBPythonScriptLogs.log'
+
+handler = RotatingFileHandler(
+    st.secrets["logs"]["poller_logs_filepath"],
+    maxBytes=5 * 1024 * 1024,  # 5 MB per file
+    backupCount=5               # keeps last 3 rotated files
+)
 
 # initialize Logger
 logging.basicConfig(
