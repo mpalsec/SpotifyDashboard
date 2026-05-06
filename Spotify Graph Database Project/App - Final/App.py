@@ -116,11 +116,9 @@ def mailtrap_error_handler(main_func):
 @mailtrap_error_handler
 def run_query(query, query_type, database_name, collection_name, update={}, projection={}):
     logger.info(f"run_query called | query_type='{query_type}' | database='{database_name}' | collection='{collection_name}' | query={query}")
-
-    client_string = f"""{st.secrets['user_database']['username']}:{quote_plus(f"{st.secrets['user_database']['password']}")}@localhost:27017/{st.secrets['user_database']['database_name']}?authSource=admin"""
     
     try:
-        client = MongoClient(f"""mongodb://{st.secrets['user_database']['username']}:{quote_plus(f"{st.secrets['user_database']['password']}")}@localhost:27017/{st.secrets['user_database']['database_name']}""")
+        client = MongoClient(f"""mongodb://{st.secrets['user_database']['username']}:{quote_plus(f"{st.secrets['user_database']['password']}")}@localhost:27017/{st.secrets['user_database']['database_name']}?authSource=admin""")
         db = client[database_name]
         collection = db[collection_name]
         logger.info(f"Successfully connected to MongoDB | database='{database_name}' | collection='{collection_name}'")
