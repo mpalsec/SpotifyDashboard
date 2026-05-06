@@ -47,24 +47,22 @@ GET_RECENTLY_PLAYED_URL = 'https://api.spotify.com/v1/me/player/recently-played'
 sender = "spotify-app@mpalsec.com" 
 receiver = "mpalmail@protonmail.com"
 
-# Logging Variables
-#LOGGING_FILEPATH = 'Logs/Spotify2DBPythonScriptLogs.log'
-
+# initialize logger and handler
 handler = RotatingFileHandler(
-    st.secrets["logs"]["poller_logs_filepath"],
-    maxBytes=5 * 1024 * 1024,  # 5 MB per file
-    backupCount=5               # keeps last 3 rotated files
+    st.secrets["logs"]["app_logs_filepath"],
+    maxBytes=5 * 1024 * 1024,
+    backupCount=5
 )
-
-# initialize Logger
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
-    filename=st.secrets["logs"]["poller_logs_filepath"]
-)
+handler.setFormatter(logging.Formatter(
+    '%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+))
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+if not logger.handlers:
+    logger.addHandler(handler)
 
 ####################################    Classes    ######################################
 

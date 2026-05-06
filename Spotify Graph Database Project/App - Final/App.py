@@ -23,22 +23,22 @@ from email.mime.text import MIMEText
 from logging.handlers import RotatingFileHandler
 
 
-# setup handler for logs
+# initialize logger and handler
 handler = RotatingFileHandler(
     st.secrets["logs"]["app_logs_filepath"],
-    maxBytes=5 * 1024 * 1024,  # 5 MB per file
-    backupCount=5               # keeps last 3 rotated files
+    maxBytes=5 * 1024 * 1024,
+    backupCount=5
 )
-
-# initialize Logger
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
-    filename=st.secrets["logs"]["app_logs_filepath"]
-)
+handler.setFormatter(logging.Formatter(
+    '%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+))
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+if not logger.handlers:
+    logger.addHandler(handler)
 
 # initialize Neo4jHelper for making db queries, along w/ an apiHelper for spotify API calls and docker for creating new neo4j DBs
 neo4jManager = Neo4jHelper(user_uid="")
