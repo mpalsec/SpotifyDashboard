@@ -984,7 +984,7 @@ def main():
                 st.session_state['user_name'] = result['name']
 
                 if not result:
-                    print(f"Error: {st.session_state['email']} does not have a user uid... returning to login...")
+                    logger.error(f"{st.session_state['email']} does not have a user uid... returning to login...")
                     st.session_state['page_state'] = 2
                 else:
                     st.session_state['page_state'] = 1
@@ -1046,7 +1046,7 @@ def main():
                                 print("Waiting For User To Auth")
                             #print(f"query params before webpage is opened: {st.query_params}")
                     except Exception as e:
-                        logger.error(f"Failed To Run OAuth Flow For User | uid={user_uid} | user_email={st.session_state['email']} | error={e}")
+                        logger.error(f"Failed To Run OAuth Flow For User | uid={st.session_state['user_uid']} | user_email={st.session_state['email']} | error={e}")
         
         # If we are being redirected back from Authorization page, then pull the auth code, use it to get a refresh token, and store in DB        
         if 'code' and 'state' in st.query_params:
@@ -1082,7 +1082,7 @@ def main():
                     st.rerun()
 
                 except Exception as e:
-                    logger.error(f"Unable to Poll Spotify Stats | user_uid={user_uid} | user_email={st.session_state['email']} | error={e}")
+                    logger.error(f"Unable to Poll Spotify Stats | user_uid={st.session_state['user_uid']} | user_email={st.session_state['email']} | error={e}")
         else:
             st.title("Spotify Stats Page")
             st.write(
@@ -1135,7 +1135,7 @@ def main():
             print(f"result of user_uid: {result}")
             if result is None:
                 st.error(f"Error: {st.session_state['email']} is not a valid email. Please sign up or try retyping email")
-                logger.error(f"User Attempted to Login | user_email={st.session_state['email']} | user_uid={user_uid}")
+                logger.error(f"User Attempted to Login | user_email={st.session_state['email']} | user_uid={st.session_state['user_uid']}")
                 st.session_state['page_state'] = 2
                 st.rerun()
             else:
@@ -1348,11 +1348,11 @@ def main():
 
                     elif (result == "passwordMismatch"):
                         st.session_state['error_message'] = f"Error: Incorrect Credentials. Please try again.."
-                        logger.error(f"User Entered Wrong Password | user_email={st.session_state['email']} | user_uid={user_uid}")
+                        logger.error(f"User Entered Wrong Password | user_email={st.session_state['email']}")
 
                     elif (result == "noUser"):
                         st.session_state['error_message'] = f"Error: account with this email does not exist. Please create an account by selecting 'Sign Up'"
-                        logger.error(f"Account Logged in From Doesn't Exist | user_email={st.session_state['email']} | user_uid={user_uid}")
+                        logger.error(f"Account Logged in From Doesn't Exist | user_email={email}")
 
                 if 'error_message' in st.session_state:
                     st.error(st.session_state.error_message)
