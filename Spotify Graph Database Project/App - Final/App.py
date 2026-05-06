@@ -215,7 +215,7 @@ def run_query(query, query_type, database_name, collection_name, update={}, proj
 # checks to see if password provided matches the hash in database
 def validate_password(email, password):
     input_password = password.encode('utf-8')
-    result = run_query({"email": email},"find","userDB","listings",projection={"password_hash":1, "_id":0})
+    result = run_query({"email": email},"find","userDB",st.secrets['user_database']['collection_name'],projection={"password_hash":1, "_id":0})
     if not result:
         print("Error: email does not exist, please try a different email or sign up for an account")
         return "noUser"
@@ -261,7 +261,7 @@ def create_new_user(email, first_name,last_name, password, current_timestamp):
 
     hashed_password = bcrypt.hashpw(input_password, salt)
 
-    result = run_query({"email": email},"find","userDB","listings")
+    result = run_query({"email": email},"find","userDB",st.secrets['user_database']['collection_name'])
 
     # check to ensure there is no email already registered. 
     if result:
