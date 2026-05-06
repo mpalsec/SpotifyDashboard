@@ -1033,7 +1033,7 @@ def main():
 
                         # create a new session, using the state generated as a "session_id" will be used to track sessions because streamlit resets cache
                         # when a redirect occurs
-                        logging.info(f"Navigating user with ID {user_uid} to OAuth URL")
+                        logging.info(f"Navigating user with ID {st.session_state['user_uid']} to OAuth URL")
                         nav_to_auth_url(auth_url)
 
                         # Wait for user to authorize scope by checking if url has auth code param inside it
