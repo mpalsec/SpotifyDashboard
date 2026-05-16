@@ -36,7 +36,7 @@ from logging.handlers import RotatingFileHandler
 AUTHORIZATION_URL = 'https://accounts.spotify.com/authorize'                            # URL Used to Pull Authorization Code
 TOKEN_URL = 'https://accounts.spotify.com/api/token'                                    # Token endpoint URL
 CLIENT_ID = '951eba0a5d2e4d3b800d74f24b0cd84c'                                          # Your OAuth2 client ID
-REDIRECT_URI = 'http://73.168.44.86:8501'                                               # Redirect URI 
+REDIRECT_URI = 'https://spotify-app.mpalsec.com'                                        # Redirect URI 
 SCOPE = 'playlist-read-private playlist-read-collaborative user-read-recently-played user-read-private user-read-email'   # Scopes requested from the API
 PORT = 8000
 
@@ -1264,7 +1264,7 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
 def main():
 
     # pull all users from DB. Will then iterate through all, and if refresh token exists, update the db for that user
-    client = MongoClient(f"""mongodb://{st.secrets['user_database']['username']}:{quote_plus(f"{st.secrets['user_database']['password']}")}@localhost:27017/{st.secrets['user_database']['database_name']}""")
+    client = MongoClient(f"""mongodb://{st.secrets['user_database']['username']}:{quote_plus(f"{st.secrets['user_database']['password']}")}@localhost:27017/{st.secrets['user_database']['database_name']}?authSource=admin""")
     db = client['userDB']
     collection = db['listings']
 
