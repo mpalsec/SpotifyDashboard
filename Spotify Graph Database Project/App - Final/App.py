@@ -118,7 +118,7 @@ def run_query(query, query_type, database_name, collection_name, update={}, proj
     logger.info(f"run_query called | query_type='{query_type}' | database='{database_name}' | collection='{collection_name}' | query={query}")
     
     try:
-        client = MongoClient(f"""mongodb://{st.secrets['user_database']['username']}:{quote_plus(f"{st.secrets['user_database']['password']}")}@localhost:27017/{st.secrets['user_database']['database_name']}?authSource=admin""")
+        client = MongoClient(f"""{st.secrets['user_database']['container_name']}://{st.secrets['user_database']['username']}:{quote_plus(f"{st.secrets['user_database']['password']}")}@localhost:27017/{st.secrets['user_database']['database_name']}?authSource=admin""")
         db = client[database_name]
         collection = db[collection_name]
         logger.info(f"Successfully connected to MongoDB | database='{database_name}' | collection='{collection_name}'")
