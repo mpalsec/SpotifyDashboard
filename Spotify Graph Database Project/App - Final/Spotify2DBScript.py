@@ -1264,7 +1264,7 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
 def main():
 
     # pull all users from DB. Will then iterate through all, and if refresh token exists, update the db for that user
-    client = MongoClient(f"""{st.secrets['user_database']['container_name']}://{st.secrets['user_database']['username']}:{quote_plus(f"{st.secrets['user_database']['password']}")}@localhost:27017/{st.secrets['user_database']['database_name']}?authSource=admin""")
+    client = MongoClient(f"""mongodb://{st.secrets['user_database']['username']}:{quote_plus(f"{st.secrets['user_database']['password']}")}@localhost:27017/{st.secrets['user_database']['database_name']}?authSource=admin""")
     db = client['userDB']
     collection = db['listings']
 
