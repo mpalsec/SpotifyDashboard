@@ -1344,16 +1344,11 @@ def main():
                         password = ""
                         st.rerun()
 
-                    elif (result == "passwordMismatch"):
-                        st.session_state['streamlitLoggedIn'] = False
-                        st.session_state['user_email'] = ""
-                        
+                    elif (result == "passwordMismatch"):            
                         st.session_state['error_message'] = f"Error: Incorrect Credentials. Please try again.."
-                        logger.error(f"User Entered Wrong Password | user_email={st.session_state['email']}")
+                        logger.error(f"User Entered Wrong Password | user_email={st.session_state['user_email']}")
 
                     elif (result == "noUser"):
-                        st.session_state['streamlitLoggedIn'] = False
-                        st.session_state['user_email'] = ""
                         st.session_state['error_message'] = f"Error: account with this email does not exist. Please create an account by selecting 'Sign Up'"
                         logger.error(f"Account Logged in From Doesn't Exist | user_email={email}")
 
