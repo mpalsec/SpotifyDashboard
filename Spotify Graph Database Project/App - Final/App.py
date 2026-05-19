@@ -1324,14 +1324,14 @@ def main():
                 email = st.text_input(label="Email", key="Email_Login")
                 password = st.text_input(label="Password",type="password",key="Password_login")
 
+                st.session_state['user_email'] = email
+
                 if st.button("Login"):
                     result = validate_password(email,password)
                     
                     if(result == "loggedIn"):
                         password = ""
                         st.session_state['streamlitLoggedIn'] = True
-                        st.session_state['user_email'] = email
-
                         st.session_state['user_uid'] = get_user_uid(st.session_state['user_email'])
 
                         result = run_query({"user_uuid": st.session_state['user_uid']}, "update", st.secrets['user_database']['database_name'], st.secrets['user_database']['collection_name'],update={"last_login":current_utc_time})
