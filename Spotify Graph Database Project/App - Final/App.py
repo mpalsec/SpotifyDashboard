@@ -977,18 +977,18 @@ def main():
                     
             # if email is in cache, but not uid, attempt to pull from db, and store into cache
             elif 'email' in st.session_state and 'user_uid' not in st.session_state:
-                result = run_query({'email':st.session_state['email']}, "find", st.secrets['user_database']['database_name'], st.secrets['user_database']['collection_name'],projection={"user_uid":1, "name":1, "_id":0})
+                result = run_query({'email':st.session_state['user_email']}, "find", st.secrets['user_database']['database_name'], st.secrets['user_database']['collection_name'],projection={"user_uid":1, "name":1, "_id":0})
                 st.session_state['user_uid'] = result['user_uid']
                 st.session_state['user_name'] = result['name']
 
                 if not result:
-                    logger.error(f"{st.session_state['email']} does not have a user uid... returning to login...")
+                    logger.error(f"{st.session_state['user_email']} does not have a user uid... returning to login...")
                     st.session_state['page_state'] = 2
                 else:
                     st.session_state['page_state'] = 1
             elif 'user_uid' in st.session_state and 'email' not in st.session_state:
                 result = run_query({'user_uid':st.session_state['user_uid']}, "find", st.secrets['user_database']['database_name'], st.secrets['user_database']['collection_name'],projection={"email":1, "name":1, "_id":0})
-                st.session_state['email'] = result['email']
+                st.session_state['user_email'] = result['email']
                 st.session_state['user_name'] = result['name']
 
                 if not result:
@@ -1044,7 +1044,7 @@ def main():
                                 print("Waiting For User To Auth")
                             #print(f"query params before webpage is opened: {st.query_params}")
                     except Exception as e:
-                        logger.error(f"Failed To Run OAuth Flow For User | uid={st.session_state['user_uid']} | user_email={st.session_state['email']} | error={e}")
+                        logger.error(f"Failed To Run OAuth Flow For User | uid={st.session_state['user_uid']} | user_email={st.session_state['user_email']} | error={e}")
         
         # If we are being redirected back from Authorization page, then pull the auth code, use it to get a refresh token, and store in DB        
         if 'code' and 'state' in st.query_params:
@@ -1080,7 +1080,7 @@ def main():
                     st.rerun()
 
                 except Exception as e:
-                    logger.error(f"Unable to Poll Spotify Stats | user_uid={st.session_state['user_uid']} | user_email={st.session_state['email']} | error={e}")
+                    logger.error(f"Unable to Poll Spotify Stats | user_uid={st.session_state['user_uid']} | user_email={st.session_state['user_email']} | error={e}")
         else:
             st.title("Spotify Stats Page")
             st.write(
@@ -1117,7 +1117,7 @@ def main():
                     #st.session_state['spotify_email'] = results['email']
                     #store_spotify_user(results)
 
-                st.write(f"Logged In As {st.session_state['email']}")
+                st.write(f"Logged In As {st.session_state['user_email']}")
 
                 #if user selects to logout, remove refresh token from DB
                 if(st.button("Logout")):
@@ -1132,8 +1132,8 @@ def main():
             result = get_user_uid(st.session_state['user_email'])
             print(f"result of user_uid: {result}")
             if result is None:
-                st.error(f"Error: {st.session_state['email']} is not a valid email. Please sign up or try retyping email")
-                logger.error(f"User Attempted to Login | user_email={st.session_state['email']} | user_uid={st.session_state['user_uid']}")
+                st.error(f"Error: {st.session_state['user_email']} is not a valid email. Please sign up or try retyping email")
+                logger.error(f"User Attempted to Login | user_email={st.session_state['user_email']} | user_uid={st.session_state['user_uid']}")
                 st.session_state['page_state'] = 2
                 st.rerun()
             else:
