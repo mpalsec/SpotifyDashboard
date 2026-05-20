@@ -205,7 +205,6 @@ def run_query(query, query_type, database_name, collection_name, update={}, proj
 
     if result:
         logger.info(f"run_query returning first result")
-        logger.info(f"This is a Test")
         return result[0]
 
     else:
