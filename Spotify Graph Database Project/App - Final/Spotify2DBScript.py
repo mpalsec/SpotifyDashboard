@@ -49,7 +49,7 @@ receiver = "mpalmail@protonmail.com"
 
 # initialize logger and handler
 handler = RotatingFileHandler(
-    st.secrets["logs"]["app_logs_filepath"],
+    st.secrets["logs"]["poller_logs_filepath"],
     maxBytes=5 * 1024 * 1024,
     backupCount=5
 )
