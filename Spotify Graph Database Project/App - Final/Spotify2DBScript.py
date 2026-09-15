@@ -1276,8 +1276,8 @@ def main():
     client = None
     try:
         client = MongoClient(f"""mongodb://{st.secrets['user_database']['username']}:{quote_plus(f"{st.secrets['user_database']['password']}")}@localhost:27017/{st.secrets['user_database']['database_name']}?authSource=admin""")
-        db = client['userDB']
-        collection = db['listings']
+        db = client[st.secrets['user_database']['database_name']]
+        collection = db[st.secrets['user_database']['collection_name']]
 
         results = collection.find({}, {"email": 1, "user_uid":1, "_id": 0})  # Exclude `_id`
 
