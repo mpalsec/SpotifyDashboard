@@ -918,7 +918,7 @@ def mailtrap_error_handler(main_func):
 
 # the main function that pulls API data into DB. Made separate from main function so that it can be run in main app file.
 def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_bar = None):
-    print("In API2DB Function")
+    logger.info(f"Entering API2DB | user_uid={user_uid}")
 
     # instantiate apiHelper and neo4jHelper to make API and DB calls
     apiManager = apiHelper("",headers = None, params = None)
@@ -930,6 +930,7 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
 
         # exit function if refresh token is not in database
         if refresh_token == "":
+            logger.error(f"No refresh token found in DB for user_uid={user_uid}, skipping sync")
             return
 
         access_token,refresh_token = apiManager.getRefreshToken(Neo4jManager=neo4jManager,refresh_token=neo4jManager.getRefreshTokenFromDB())
@@ -948,7 +949,7 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
     }
 
     #if access token isn't able to get pulled, throw an error and store metric in DB to tell front end that refresh token is expired
-    if access_token is False:
+    if access_token is None:
         st.error('Error: access token was unable to be pulled.. this likely means the refresh token is expired. Rerun so user can reauthorize', icon=":material/sentiment_dissatisfied:")
         logger.error(f"Access token doesn't exist for user_uid={user_uid}, refresh_token needs to be pulled")
         if neo4jManager.storeRefreshTokenExpired(True):
@@ -968,6 +969,7 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
     recently_played_data = apiManager.getAPIResponse(type = "recently_played")
 
     if(recently_played_data == 0):
+        logger.error(f"Aborting sync for user_uid={user_uid}: could not fetch recently played tracks")
         return
     else:
         recently_played_tracks = convertJSON(recently_played_data,"track")
@@ -987,159 +989,93 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
 
     # ETL code. Extracts API info, converts it into objects that are then loaded to Graph Database
     for track in list(recently_played_tracks.keys()):
-        played_at_timestamp, hour = convertTimestamp(recently_played_tracks[track]['played_at'])
+        try:
+            played_at_timestamp, hour = convertTimestamp(recently_played_tracks[track]['played_at'])
 
-        # if the song's played at time is older than the last seen play time, then skip it
-        # used to ensure there is no overlap between syncs
-        if(last_sync_timestamp < played_at_timestamp):
+            # if the song's played at time is older than the last seen play time, then skip it
+            # used to ensure there is no overlap between syncs
+            if(last_sync_timestamp < played_at_timestamp):
 
-            logger.info(f"name of current track: {recently_played_tracks[track]['name']}")
-            logger.info(f"track play time: {played_at_timestamp}")
+                logger.info(f"name of current track: {recently_played_tracks[track]['name']}")
+                logger.info(f"track play time: {played_at_timestamp}")
 
-            #if the track already exists in DB, then overwrite its popularity, last played, preview_url, and iterate times played
-            if(neo4jManager.check_node_exists(track,"track")):
+                #if the track already exists in DB, then overwrite its popularity, last played, preview_url, and iterate times played
+                if(neo4jManager.check_node_exists(track,"track")):
 
-                # pull track play history from node in DB
-                play_history = neo4jManager.getPlayHistory(track,"Track")
-                hour_of_day = neo4jManager.getHourOfDay(track,"Track")
+                    # pull track play history from node in DB
+                    play_history = neo4jManager.getPlayHistory(track,"Track")
+                    hour_of_day = neo4jManager.getHourOfDay(track,"Track")
 
-                # append new values to arrays
-                play_history.append(played_at_timestamp)
-                hour_of_day.append(hour)
-
-                popularity = recently_played_tracks[track]['popularity']
-                preview_url = recently_played_tracks[track]['preview_url']
-
-                query = f"""
-                    MATCH (n:Track {{id: "{track}"}})
-                    WHERE n.user_uid = "{user_uid}"
-                    SET n.popularity={popularity}, n.preview_url="{preview_url}", n.play_history={play_history}, n.hour_of_day={hour_of_day}
-                    RETURN n as output
-                """
-                
-                result = neo4jManager.runQuery(query)
-
-                if result is not None:
-                    print(f"Query Succeeded: {result}")
-                else:
-                    print("Query failed but program is continuing.")       
-                
-            else:
-                # if the track doesn't exist, create a new node
-                params = {
-                    "user_uid": user_uid,
-                    "name": recently_played_tracks[track]['name'],
-                    "id": track,
-                    "play_history": [played_at_timestamp],
-                    "hour_of_day":[hour],
-                    "popularity": recently_played_tracks[track]['popularity'],
-                    "preview_url": recently_played_tracks[track]['preview_url'],
-                }
-
-                neo4jManager.createNode(params=params,type="track")
-
-            # pull album info
-            album_results = apiManager.getAPIResponse("album",url=recently_played_tracks[track]['album']['url'])
-
-            # if an error is returned when making call.. skip storing in DB
-            if(album_results == 0):
-                logger.error(f"Received an Error When Making API Call.. Skipping The entry for {artist}")
-            else:
-                album_results = convertJSON(album_results,"album")
-
-                album_id = recently_played_tracks[track]['album']['id']
-                logger.info(f"making API Call to Pull Data For Album With ID {album_id}")
-
-                # if album exists, update params
-                if(neo4jManager.check_node_exists(album_id,"album")):
-                    
-                    # pull album play history
-                    play_history = neo4jManager.getPlayHistory(album_id, "Album")
-                    hour_of_day = neo4jManager.getHourOfDay(album_id, "Album")
-
-                    # append values to arrays
+                    # append new values to arrays
                     play_history.append(played_at_timestamp)
                     hour_of_day.append(hour)
 
-                    image_url = album_results['image_url']
-                    label = album_results['label']
-                    popularity = album_results['popularity']
+                    popularity = recently_played_tracks[track]['popularity']
+                    preview_url = recently_played_tracks[track]['preview_url']
 
                     query = f"""
-                        MATCH (n:Album {{id: "{album_id}"}})
+                        MATCH (n:Track {{id: "{track}"}})
                         WHERE n.user_uid = "{user_uid}"
-                        SET n.image_url="{image_url}", n.label="{label}", n.popularity={popularity}, n.image_url="{image_url}", n.play_history={play_history}, n.hour_of_day={hour_of_day}
+                        SET n.popularity={popularity}, n.preview_url="{preview_url}", n.play_history={play_history}, n.hour_of_day={hour_of_day}
                         RETURN n as output
                     """
-
+                
                     result = neo4jManager.runQuery(query)
 
                     if result is not None:
                         print(f"Query Succeeded: {result}")
                     else:
                         print("Query failed but program is continuing.")       
-
+                
                 else:
+                    # if the track doesn't exist, create a new node
                     params = {
                         "user_uid": user_uid,
-                        "name": album_results['name'],
-                        "id": album_id,
-                        "image_url": album_results['image_url'],
-                        "label": album_results['label'],
+                        "name": recently_played_tracks[track]['name'],
+                        "id": track,
                         "play_history": [played_at_timestamp],
-                        "hour_of_day": [hour],
-                        "popularity": album_results['popularity'],
+                        "hour_of_day":[hour],
+                        "popularity": recently_played_tracks[track]['popularity'],
+                        "preview_url": recently_played_tracks[track]['preview_url'],
                     }
 
-                    # Create new node and connect track to album in DB
-                    neo4jManager.createNode("album",params)
+                    neo4jManager.createNode(params=params,type="track")
 
-                # create path from track to album
-                if not neo4jManager.doesPathExist(track,album_id,"Track","Album","IN_ALBUM"):
-                    neo4jManager.makePath("IN_ALBUM",track,album_id,"Track","Album")
+                # pull album info
+                album_results = apiManager.getAPIResponse("album",url=recently_played_tracks[track]['album']['url'])
 
-                # create/update Genre Node based on genres associated with album
-                neo4jManager.updateGenres(node_id=album_id,genres=album_results['genres'],node_type="genre",timestamp=played_at_timestamp,hour=hour)
-                    
-
-            # iterate through all artists
-            for artist in recently_played_tracks[track]['artists']:
-                
-                # pull id of artist
-                artist_id = artist['id']
-                logger.info(f"making API Call to Pull Data For Artist With ID {artist_id}")
-
-                # Make API Call to pull artist info and convert to stripped down JSON object
-                artist_results = apiManager.getAPIResponse("artist",url=artist['url'])
+                album_id = recently_played_tracks[track]['album'].get('id', '')
+                album_available = False
 
                 # if an error is returned when making call.. skip storing in DB
-                if(artist_results == 0):
-                    logger.error(f"Received an Error When Making API Call.. Skipping The entry for {artist}")
-
+                if(album_results == 0):
+                    logger.error(f"Received an Error When Making API Call.. Skipping the album entry for track {track} (album_id={album_id})")
                 else:
-                    artist_results = convertJSON(artist_results,"artist")
+                    album_available = True
+                    album_results = convertJSON(album_results,"album")
+
+                    logger.info(f"making API Call to Pull Data For Album With ID {album_id}")
+
+                    # if album exists, update params
+                    if(neo4jManager.check_node_exists(album_id,"album")):
                     
-                    # if the artist exists, update its parameters. If it doesn't, create a new node and make path to track
-                    if (neo4jManager.check_node_exists(artist_id, "artist")):
+                        # pull album play history
+                        play_history = neo4jManager.getPlayHistory(album_id, "Album")
+                        hour_of_day = neo4jManager.getHourOfDay(album_id, "Album")
 
-                        # pull artists play history from node in DB
-                        play_history = neo4jManager.getPlayHistory(artist_id,"Artist")
-                        hour_of_day = neo4jManager.getHourOfDay(artist_id,"Artist")
-
-                        # append value to arrays
+                        # append values to arrays
                         play_history.append(played_at_timestamp)
                         hour_of_day.append(hour)
 
-                        popularity = artist_results[artist_id]['popularity']
-                        image_url = artist_results[artist_id]['image_url']
-                        num_followers =  artist_results[artist_id]['num_followers']
-                        
-                        # Update artist fields
+                        image_url = album_results['image_url']
+                        label = album_results['label']
+                        popularity = album_results['popularity']
+
                         query = f"""
-                            MATCH (n:Artist {{id: "{artist_id}"}})
+                            MATCH (n:Album {{id: "{album_id}"}})
                             WHERE n.user_uid = "{user_uid}"
-                            SET n.popularity={popularity}, n.image_url="{image_url}", n.num_followers="{num_followers}", n.play_history={play_history}, n.hour_of_day={hour_of_day}
-                            RETURN n
+                            SET n.image_url="{image_url}", n.label="{label}", n.popularity={popularity}, n.image_url="{image_url}", n.play_history={play_history}, n.hour_of_day={hour_of_day}
+                            RETURN n as output
                         """
 
                         result = neo4jManager.runQuery(query)
@@ -1147,104 +1083,176 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
                         if result is not None:
                             print(f"Query Succeeded: {result}")
                         else:
-                            print("Query failed")  
+                            print("Query failed but program is continuing.")       
 
                     else:
-
                         params = {
                             "user_uid": user_uid,
-                            "name":artist_results[artist_id]['name'],
-                            "popularity": artist_results[artist_id]['popularity'],
-                            "id": artist_id,
-                            "image_url": artist_results[artist_id]['image_url'],
-                            "num_followers": artist_results[artist_id]['num_followers'],
+                            "name": album_results['name'],
+                            "id": album_id,
+                            "image_url": album_results['image_url'],
+                            "label": album_results['label'],
                             "play_history": [played_at_timestamp],
-                            "hour_of_day": [hour]
+                            "hour_of_day": [hour],
+                            "popularity": album_results['popularity'],
                         }
 
-                        # create artist node
-                        neo4jManager.createNode(params=params,type="artist")
+                        # Create new node and connect track to album in DB
+                        neo4jManager.createNode("album",params)
 
-                    # create path from track to artist
-                    if not neo4jManager.doesPathExist(track,artist_id,"Track","Artist","MADE_BY"):
-                        neo4jManager.makePath("MADE_BY",track,artist_id,"Track","Artist")
+                    # create path from track to album
+                    if not neo4jManager.doesPathExist(track,album_id,"Track","Album","IN_ALBUM"):
+                        neo4jManager.makePath("IN_ALBUM",track,album_id,"Track","Album")
+
+                    # create/update Genre Node based on genres associated with album
+                    neo4jManager.updateGenres(node_id=album_id,genres=album_results['genres'],node_type="genre",timestamp=played_at_timestamp,hour=hour)
                     
-                    # create path from album to artist
-                    if not neo4jManager.doesPathExist(album_id,artist_id,"Album","Artist","MADE_BY"):
-                        neo4jManager.makePath("MADE_BY",album_id,artist_id,"Album","Artist")
 
-                    # update the genres associated with artist
-                    neo4jManager.updateGenres(node_id = artist_id,genres = artist_results[artist_id]['genres'],node_type="Artist",timestamp=played_at_timestamp,hour=hour)
-            
-            
-            # if the person played a track through a playlist, add/modify playlist in DB
-            if(recently_played_tracks[track]['context']['type'] == "playlist"):
+                # iterate through all artists
+                for artist in recently_played_tracks[track]['artists']:
                 
-                # pull id of playlist
-                playlist_id = recently_played_tracks[track]['context']['id']
+                    # pull id of artist
+                    artist_id = artist['id']
+                    logger.info(f"making API Call to Pull Data For Artist With ID {artist_id}")
 
-                logger.info(f"making API Call to Pull Data For Playlist With ID {playlist_id}")
+                    # Make API Call to pull artist info and convert to stripped down JSON object
+                    artist_results = apiManager.getAPIResponse("artist",url=artist['url'])
 
-                # make API call to get additional info about playlist
-                playlist_results = apiManager.getAPIResponse("playlist",url=recently_played_tracks[track]['context']['url'])
+                    # if an error is returned when making call.. skip storing in DB
+                    if(artist_results == 0):
+                        logger.error(f"Received an Error When Making API Call.. Skipping The entry for {artist}")
 
-                if(playlist_results == 0):
-                    logger.error(f"Received an Error When Making API Call.. Skipping The entry for {playlist_id}")
-                else:
-                    playlist_results = convertJSON(playlist_results,"playlist")
+                    else:
+                        artist_results = convertJSON(artist_results,"artist")
+                    
+                        # if the artist exists, update its parameters. If it doesn't, create a new node and make path to track
+                        if (neo4jManager.check_node_exists(artist_id, "artist")):
 
-                    if(neo4jManager.check_node_exists(playlist_id,"playlist")):
+                            # pull artists play history from node in DB
+                            play_history = neo4jManager.getPlayHistory(artist_id,"Artist")
+                            hour_of_day = neo4jManager.getHourOfDay(artist_id,"Artist")
+
+                            # append value to arrays
+                            play_history.append(played_at_timestamp)
+                            hour_of_day.append(hour)
+
+                            popularity = artist_results[artist_id]['popularity']
+                            image_url = artist_results[artist_id]['image_url']
+                            num_followers =  artist_results[artist_id]['num_followers']
                         
-                        # pull playlist play history from node in DB
-                        play_history = neo4jManager.getPlayHistory(playlist_id, "Playlist")
-                        hour_of_day = neo4jManager.getHourOfDay(playlist_id, "Playlist")
+                            # Update artist fields
+                            query = f"""
+                                MATCH (n:Artist {{id: "{artist_id}"}})
+                                WHERE n.user_uid = "{user_uid}"
+                                SET n.popularity={popularity}, n.image_url="{image_url}", n.num_followers="{num_followers}", n.play_history={play_history}, n.hour_of_day={hour_of_day}
+                                RETURN n
+                            """
 
-                        #append next value to these arrays
-                        play_history.append(played_at_timestamp)
-                        hour_of_day.append(hour)
+                            result = neo4jManager.runQuery(query)
 
-                        num_followers = playlist_results['num_followers']
-                        description = playlist_results['description']
-                        image_url = playlist_results['image_url']
+                            if result is not None:
+                                print(f"Query Succeeded: {result}")
+                            else:
+                                print("Query failed")  
 
-                        query = f"""
-                            MATCH (n:Playlist {{id: "{playlist_id}"}})
-                            WHERE n.user_uid = "{user_uid}"
-                            SET n.num_followers={num_followers}, n.play_history={play_history}, n.hour_of_day={hour_of_day}, n.image_url="{image_url}", n.description="{description}", n.image_url="{image_url}"
-                            RETURN n
-                        """
-
-                        result = neo4jManager.runQuery(query)
-
-                        if result is not None:
-                            print(f"Query Succeeded: {result}")
                         else:
-                            print("Query failed")  
+
+                            params = {
+                                "user_uid": user_uid,
+                                "name":artist_results[artist_id]['name'],
+                                "popularity": artist_results[artist_id]['popularity'],
+                                "id": artist_id,
+                                "image_url": artist_results[artist_id]['image_url'],
+                                "num_followers": artist_results[artist_id]['num_followers'],
+                                "play_history": [played_at_timestamp],
+                                "hour_of_day": [hour]
+                            }
+
+                            # create artist node
+                            neo4jManager.createNode(params=params,type="artist")
+
+                        # create path from track to artist
+                        if not neo4jManager.doesPathExist(track,artist_id,"Track","Artist","MADE_BY"):
+                            neo4jManager.makePath("MADE_BY",track,artist_id,"Track","Artist")
+                    
+                        # create path from album to artist
+                        if album_available and not neo4jManager.doesPathExist(album_id,artist_id,"Album","Artist","MADE_BY"):
+                            neo4jManager.makePath("MADE_BY",album_id,artist_id,"Album","Artist")
+
+                        # update the genres associated with artist
+                        neo4jManager.updateGenres(node_id = artist_id,genres = artist_results[artist_id]['genres'],node_type="Artist",timestamp=played_at_timestamp,hour=hour)
+            
+            
+                # if the person played a track through a playlist, add/modify playlist in DB
+                if(recently_played_tracks[track]['context']['type'] == "playlist"):
+                
+                    # pull id of playlist
+                    playlist_id = recently_played_tracks[track]['context']['id']
+
+                    logger.info(f"making API Call to Pull Data For Playlist With ID {playlist_id}")
+
+                    # make API call to get additional info about playlist
+                    playlist_results = apiManager.getAPIResponse("playlist",url=recently_played_tracks[track]['context']['url'])
+
+                    if(playlist_results == 0):
+                        logger.error(f"Received an Error When Making API Call.. Skipping The entry for {playlist_id}")
+                    else:
+                        playlist_results = convertJSON(playlist_results,"playlist")
+
+                        if(neo4jManager.check_node_exists(playlist_id,"playlist")):
+                        
+                            # pull playlist play history from node in DB
+                            play_history = neo4jManager.getPlayHistory(playlist_id, "Playlist")
+                            hour_of_day = neo4jManager.getHourOfDay(playlist_id, "Playlist")
+
+                            #append next value to these arrays
+                            play_history.append(played_at_timestamp)
+                            hour_of_day.append(hour)
+
+                            num_followers = playlist_results['num_followers']
+                            description = playlist_results['description']
+                            image_url = playlist_results['image_url']
+
+                            query = f"""
+                                MATCH (n:Playlist {{id: "{playlist_id}"}})
+                                WHERE n.user_uid = "{user_uid}"
+                                SET n.num_followers={num_followers}, n.play_history={play_history}, n.hour_of_day={hour_of_day}, n.image_url="{image_url}", n.description="{description}", n.image_url="{image_url}"
+                                RETURN n
+                            """
+
+                            result = neo4jManager.runQuery(query)
+
+                            if result is not None:
+                                print(f"Query Succeeded: {result}")
+                            else:
+                                print("Query failed")  
 
                     
-                    # if not in DB create node
-                    else:
-                        params={
-                            "user_uid": user_uid,
-                            "name": playlist_results['name'],
-                            "description": playlist_results['description'],
-                            "num_followers": playlist_results['num_followers'],
-                            "image_url": playlist_results['image_url'],
-                            "owner_name": playlist_results['owner']['name'],
-                            "id": playlist_id,
-                            "play_history": [played_at_timestamp],
-                            "hour_of_day": [hour]
-                        }
+                        # if not in DB create node
+                        else:
+                            params={
+                                "user_uid": user_uid,
+                                "name": playlist_results['name'],
+                                "description": playlist_results['description'],
+                                "num_followers": playlist_results['num_followers'],
+                                "image_url": playlist_results['image_url'],
+                                "owner_name": playlist_results['owner']['name'],
+                                "id": playlist_id,
+                                "play_history": [played_at_timestamp],
+                                "hour_of_day": [hour]
+                            }
 
-                        result = neo4jManager.createNode("playlist",params)
+                            result = neo4jManager.createNode("playlist",params)
 
-                    if not neo4jManager.doesPathExist(track,playlist_id,"Track","Playlist","IN_PLAYLIST"):
-                        neo4jManager.makePath("IN_PLAYLIST",track,playlist_id,"Track","Playlist")
+                        if not neo4jManager.doesPathExist(track,playlist_id,"Track","Playlist","IN_PLAYLIST"):
+                            neo4jManager.makePath("IN_PLAYLIST",track,playlist_id,"Track","Playlist")
 
-        # set progress bar if loading from streamlit app                
-        if my_bar is not None:
-            progress_value = progress_value + progress_delta
-            my_bar.progress(progress_value, text = "Loading Tracks... Please Wait")
+            # set progress bar if loading from streamlit app                
+            if my_bar is not None:
+                progress_value = progress_value + progress_delta
+                my_bar.progress(progress_value, text = "Loading Tracks... Please Wait")
+        except Exception as e:
+            logger.error(f"Failed to process track {track} for user_uid={user_uid}: {e}\n{traceback.format_exc()}")
 
     # store timestamp of last synced song in DB
     neo4jManager.storeTimestamp(int(utc_timestamp))
@@ -1262,23 +1270,50 @@ def API2DB(user_uid, access_token = "", refresh_token="", utc_timestamp="",my_ba
 # run function that pulls data for all user containers. Will be main script that runs on web app container daily
 @mailtrap_error_handler
 def main():
+    logger.info("Starting main() poller run")
 
     # pull all users from DB. Will then iterate through all, and if refresh token exists, update the db for that user
-    client = MongoClient(f"""mongodb://{st.secrets['user_database']['username']}:{quote_plus(f"{st.secrets['user_database']['password']}")}@localhost:27017/{st.secrets['user_database']['database_name']}?authSource=admin""")
-    db = client['userDB']
-    collection = db['listings']
+    client = None
+    try:
+        client = MongoClient(f"""mongodb://{st.secrets['user_database']['username']}:{quote_plus(f"{st.secrets['user_database']['password']}")}@localhost:27017/{st.secrets['user_database']['database_name']}?authSource=admin""")
+        db = client['userDB']
+        collection = db['listings']
 
-    results = collection.find({}, {"email": 1, "user_uid":1, "_id": 0})  # Exclude `_id`
+        results = collection.find({}, {"email": 1, "user_uid":1, "_id": 0})  # Exclude `_id`
 
-    # Convert to a list of dictionaries
-    data_list = list([doc for doc in results])
+        # Convert to a list of dictionaries
+        data_list = list([doc for doc in results])
+    except Exception as e:
+        # Can't proceed without the user list, so let this propagate up to mailtrap_error_handler
+        logger.error(f"Failed to connect to MongoDB or fetch user listings: {e}\n{traceback.format_exc()}")
+        raise
+    finally:
+        if client is not None:
+            client.close()
 
-    client.close()
-    
-    
+    logger.info(f"Found {len(data_list)} user(s) to process")
+
+    success_count = 0
+    failure_count = 0
+
     for doc in data_list:
-        print(f"updating DB for user {doc['user_uid']}")
-        API2DB(user_uid = doc['user_uid'])
+        user_uid = doc.get('user_uid')
+
+        if not user_uid:
+            logger.error(f"Skipping listing with missing user_uid: {doc}")
+            failure_count += 1
+            continue
+
+        logger.info(f"Updating DB for user_uid={user_uid}")
+        try:
+            API2DB(user_uid=user_uid)
+            success_count += 1
+        except Exception as e:
+            # Isolate failures per-user so one bad user doesn't abort the whole batch run
+            failure_count += 1
+            logger.error(f"Failed to update DB for user_uid={user_uid}: {e}\n{traceback.format_exc()}")
+
+    logger.info(f"Finished main() poller run | succeeded={success_count} | failed={failure_count} | total={len(data_list)}")
 
 
 ############################################################################################
